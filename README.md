@@ -99,6 +99,14 @@ promptlab/
 
 ## Your Mission
 
+### 🧪 Experimentation Encouraged!
+While we provide guidelines, **you are the engineer**. If you see a better way to solve a problem using AI, do it!
+- Want to swap the storage layer for a real database? **Go for it.**
+- Want to add Authentication? **Do it.**
+- Want to rewrite the API in a different style? **As long as tests pass, you're clear.**
+
+The goal is to learn how to build *better* software *faster* with AI. Don't be afraid to break things and rebuild them better.
+
 ### Week 1: Fix the Backend
 - Understand this codebase using AI
 - Find and fix the bugs
