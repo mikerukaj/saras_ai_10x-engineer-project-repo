@@ -110,6 +110,12 @@ pytest tests/ -v
 
 All tests should pass. ✅
 
+### 🚀 Bonus: Go Beyond (Optional)
+Finished early? Want to challenge yourself?
+- **Persist Data:** The current storage is in-memory and resets on restart. Try implementing `JSONFileStorage` or `SQLiteStorage` to save data to disk.
+- **Better Search:** Improve the `search` parameter in `GET /prompts` to filter by tags or description, not just title.
+- **AI-Powered:** Use AI to generate a `seed_data.py` script that populates your API with 50 realistic prompts for testing.
+
 ---
 
 # Week 2: Documentation & Specifications
@@ -226,6 +232,11 @@ Create specifications for two new features in `specs/` folder:
 - [ ] Running `python -m pydoc app.models` shows docstrings
 - [ ] API reference is complete and accurate
 - [ ] Specs are detailed enough to implement from
+
+### 🚀 Bonus: Go Beyond (Optional)
+- **Interactive Docs:** Research tools like `MkDocs` or `Swagger UI` extensions to make your documentation interactive.
+- **Diagrams:** Use Mermaid.js in your spec files to visualize the data model or request flow. Ask AI: "Generate a Mermaid class diagram for these Pydantic models."
+- **Badges:** Add dynamic badges to your README (Build Status, Coverage, etc.).
 
 ---
 
@@ -352,6 +363,11 @@ docker-compose up --build
 git push origin main
 # Check Actions tab on GitHub
 ```
+
+### 🚀 Bonus: Go Beyond (Optional)
+- **Pre-commit Hooks:** Set up `pre-commit` to run linting automatically before every git commit.
+- **Production DB:** Switch your Docker Compose setup to use a real PostgreSQL container instead of in-memory storage.
+- **Mutation Testing:** Research "Mutation Testing" and try running `mutmut` on your codebase to find gaps in your tests.
 
 ---
 
@@ -485,6 +501,11 @@ Open http://localhost:5173 and verify:
 - [ ] Collections work
 - [ ] Search/filter works
 - [ ] Looks professional
+
+### 🚀 Bonus: Go Beyond (Optional)
+- **Real AI Integration:** Add a "Run" button to your Prompt Detail page. Connect it to the OpenAI API (via your backend) to actually execute the prompts!
+- **Dark/Light Mode:** Use AI to generate a theme switcher for your frontend.
+- **Drag & Drop:** Implement drag-and-drop reordering for your Prompt List.
 
 ---
 
