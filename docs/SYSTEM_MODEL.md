@@ -52,3 +52,26 @@ flowchart TD
     F -- FastAPI sends the response --> G[END]
 ```
 
+# MODELS & RATIONSHIPS
++ Defined in models.py
+## **Prompt**
++ id: UUID (auto-generated)
++ title: str (1-200 chars, required)
++ content: str (min 1 char, required) - the actual prompt text, supports {{variable}} template syntax
++ description: optional str (max 500 chars)
++ collection_id: optional str - **foreign key by convention only. no referential integrity enforce**
++ created_at / updated_at: UTC datetimes (auto-set at creation)
+## **Collection**
++ id: UUID (auto-generated)
++ name: str (1-100 chars, required)
++ description: optional str (max 500 chars)
++ created_at: UTC datetime
+### **Relationship**
++ A Prompt optionally belongs to one Collection via collection_id. This is a soft reference - there is no join table, no cascade, and no enofrcement. Deleting a colleciton leaves its prompts with a dangling collection_id.
++ There are three model tiers per resource:
+	1. \*Base (shared fields)
+	2. \*Create (input, no id/timestamps)
+	3. \* (full response, with id/timestamps).
++ PromptUpdate is identical to PromptCreate and requires all fields on evey PUT (no partial update / PATCH support).
+
+# **STORAGE LAYER**
