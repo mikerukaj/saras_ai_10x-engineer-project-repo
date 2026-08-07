@@ -11,6 +11,8 @@ HTTP Request
 
 + There is no database, no auth, no frontend, and no async I/O - it is a synchronous CRUD API.
 + The config.taml is not consumed by the backend at all
++ This is a standard 3-layer split: routes -> business logic/helpers -> storage
+	+ This pattern will still be here when swapping the storage layer for a real database - the whole point of separating it out.
 
 | FILE | FUNCTION |
 | --- | --- |
@@ -19,3 +21,21 @@ HTTP Request
 | app/models.py | data shapes (Pydantic) |
 | app/storage.py | data layer (in-memory dict, stands in for a DB |
 | app/utils.py | pure helper functions (sorting, filtering, search) |
+
+# **ENTRY POINTS**
++ The server starts in the backend/main.py file via uvicorn on 0.0.0.0:8000.
++ 11 routes registered in backend/app/api.py
+
+| METHOD | PATH | STATUS |
+| --- | --- | --- |
+| GET | /health | Works |
+| GET | /prompts | Works (sorting bug) |
+| GET | /prompts/{id} | Bug 1: 500 on missing ID instead of 404 |
+| POST | /prompts |  Works | 
+| PUT | /prompts/{id} | Bug 2: updated_at not refreshed |
+| PATCH | /prompts/{id} | Missing - noted in comment but not implemented |
+| DELETE | /prompts/{id} | Works |
+| GET | /collections | Works |
+| GET | /collections/{id} | Works |
+| POST | /collections | Works |
+| DELETE | /collections/{id} | Bug 4: orphans child prompts |
