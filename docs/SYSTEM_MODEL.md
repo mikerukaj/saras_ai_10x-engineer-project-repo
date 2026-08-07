@@ -44,6 +44,10 @@ HTTP Request
 A request travels this path:
 ```mermaid
 flowchart TD
-    A[**HTTP IN**] -- FastAPI router in api.py matches the path and method --> B[**PYDANTIC VALIDATION**] -- The request body (if any) is deserialized and validated against a model in models.py. Invalid payloads are rejected with 422 before any route handler code runs --> C[**ROUTE HANDLER**] -- Calls storage.* methods, optionally calls utils.* helpers for filtering/sorting/search --> D[**STORAGE**] -- storage.py reads/writes the in-memory Python dicts --> E[**PYDANTIC SERIALIZATION**] -- The returned model is serialized back to JSON via the response_model annotation --> F[**HTTP OUT**] --- FastAPI sends the response
+    A[**HTTP IN**] -- FastAPI router in api.py matches the path and method --> B[**PYDANTIC VALIDATION**] 
+    C -- The request body (if any) is deserialized and validated against a model in models.py. Invalid payloads are rejected with 422 before any route handler code runs --> C[**ROUTE HANDLER**] 
+    D -- Calls storage.* methods, optionally calls utils.* helpers for filtering/sorting/search --> D[**STORAGE**] 
+    E -- storage.py reads/writes the in-memory Python dicts --> E[**PYDANTIC SERIALIZATION**] 
+    F -- The returned model is serialized back to JSON via the response_model annotation --> F[**HTTP OUT**] --- FastAPI sends the response
 ```
 
