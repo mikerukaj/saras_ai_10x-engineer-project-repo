@@ -13,6 +13,7 @@ HTTP Request
 + The config.taml is not consumed by the backend at all
 
 | FILE | FUNCTION |
+| --- | --- |
 | main.py | entry point, just boots uvicorn |
 | app/api.py | HTTP Layer (FastAPI routes) |
 | app/models.py | data shapes (Pydantic) |
