@@ -3,7 +3,10 @@
 
 ```mermaid
 HTTP Request;
-	A[FastAPI (api.py)] --> B{Pydantic validation (models.py)}; C{Business logic / utilities (utils.py)}; D{In-memory storage (storage.py)}
+	A[FastAPI (api.py)] --> B{Pydantic validation (models.py)};
+	B{Business logic / utilities (utils.py)};
+	B{In-memory storage (storage.py)};
+	C --> G[End];
 ```
 
 + There is no database, no auth, no frontend, and no async I/O - it is a synchronous CRUD API.
