@@ -48,6 +48,7 @@ flowchart TD
     C -- The request body (if any) is deserialized and validated against a model in models.py. Invalid payloads are rejected with 422 before any route handler code runs --> C[**ROUTE HANDLER**] 
     D -- Calls storage.* methods, optionally calls utils.* helpers for filtering/sorting/search --> D[**STORAGE**] 
     E -- storage.py reads/writes the in-memory Python dicts --> E[**PYDANTIC SERIALIZATION**] 
-    F -- The returned model is serialized back to JSON via the response_model annotation --> F[**HTTP OUT**] --- FastAPI sends the response
+    F -- The returned model is serialized back to JSON via the response_model annotation --> F[**HTTP OUT**] 
+    G -- FastAPI sends the response --> G[*END*]
 ```
 
