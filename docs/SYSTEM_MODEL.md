@@ -1,13 +1,12 @@
 # **ARCHITECTURE**
 + PromptLab is a "Postman for Prompts" - a backend-only REST API for storing, organizing, and managing AI prompt templates. It;s a Python/FastAPI applicaiton with a deliberately simple flat architecture
 
-```mermaid
-graph TD;
-	A[HTTP Request] --> B[FastAPI (api.py)];
-	C -- Pydantic validation (models.py);
-	C -- Business logic / utilities (utils.py);
-	C -- In-memory storage (storage.py);
-	D --> E[End];
+```
+HTTP Request
+    └── FastAPI (api.py)
+            ├── Pydantic validation (models.py)
+            ├── Business logic / utilities (utils.py)
+            └── In-memory storage (storage.py)
 ```
 
 + There is no database, no auth, no frontend, and no async I/O - it is a synchronous CRUD API.
