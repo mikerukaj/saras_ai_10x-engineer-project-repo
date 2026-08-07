@@ -39,3 +39,15 @@ HTTP Request
 | GET | /collections/{id} | Works |
 | POST | /collections | Works |
 | DELETE | /collections/{id} | Bug 4: orphans child prompts |
+
+# **DATA FLOW**
+A request travels this path:
+```mermaid
+flowchart TD
+    A[HTTP in] -- FastAPI router in api.py matches the path and method --> B{Is it raining?}
+    B -- Yes --> C[Take an umbrella]
+    B -- No --> D[Wear sunglasses]
+    C --> E[Go outside]
+    D --> E[Go outside]
+```
+
