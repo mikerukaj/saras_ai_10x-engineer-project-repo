@@ -33,3 +33,6 @@
 > | GET | /collections/{id} | Works |
 > | POST | /collections | Works |
 > | DELETE | /collections/{id} | Bug 4: orphans child prompts |
+
+# **SECOND PROMPT**
++ The claude code resonse from the first prompt was pretty good, but I wanted a bit more detail. So I decided to test the prompt above in the browser and make some adjustmensts using the "Anatomy of an Effective Prompt" to set the stage as Claude being a Senior developer on the team onboarding me who is a junior developer and will be responsible for the codebase moving forward. Adding this context and assigning the roles to Claude helped dramatically and provided a great amount more detail and was ultimately what helped me finish writing the docs.SYSTEM_MODEL.md doc.
