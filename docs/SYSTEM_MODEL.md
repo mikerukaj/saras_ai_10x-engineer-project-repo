@@ -75,3 +75,22 @@ flowchart TD
 + PromptUpdate is identical to PromptCreate and requires all fields on evey PUT (no partial update / PATCH support).
 
 # **STORAGE LAYER**
++ storage.py is a module-level singleton (storage = Storage()) backed by two plain dicts: \_prompts: Dict[str, Prompt] and \_collections: Dict[str, Collection], keyed by UUID string.
+	+ **Zero persistence** - every restart wipes all data
+	+ **No concurrency safety** - no locks; race conditions possible under load (FastAPI can run threaded workers)
+	+ **Unbounded memory growth** - no eviction, no pagination at storage level
+	+ **No query capability** - filtering/search is done by loading all records into memory and iterating (see utils.py)
++ The clear() method is used by test fixtures to reset state between test runs (good design choice)
++ get_prompts_by_collection() is implemented but unused - dead code.
+
+# **EXTERNAL DEPENDENCIES**
++ Defined in requirements.txt
+
+| PACKAGE | VERSION | ROLE |
+| --- | --- | ---|
+| fastapi | 0.109.0 | Web framework + routing + OpenAPI docs generation |
+| uvicorn | 0.27.0 | ASGI server (runs FastAPI | 
+| pydantic | 2.5.3 | Request/response validation and serialization |
+| pytest | 7.4.4 | Test runer |
+| pytest-cov | 4.1.0 | Test coverage reporting |
+| httpx | 0.26.0 | HTTP client used by FastAPI's TestClient in tests |
