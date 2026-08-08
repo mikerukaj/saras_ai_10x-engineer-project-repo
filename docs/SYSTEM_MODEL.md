@@ -94,3 +94,10 @@ flowchart TD
 | pytest | 7.4.4 | Test runer |
 | pytest-cov | 4.1.0 | Test coverage reporting |
 | httpx | 0.26.0 | HTTP client used by FastAPI's TestClient in tests |
+
+# **CONTEXT STRATEGY**
+## Task 1.2
++ For the first prompt, I made a general prompt along the lines of "You are a developer that just inherited this baserepo. Please explore this repo and discuss the following:" and then listed the parts I wanted to be brought up to speed on (i.e. architecture, data flow, etc.).
++ The first response was good, but I wanted some more detail, I decided to use clause in the web browser and follow the "Anatomy of an Effective Prompt" documentation. This method provided even more detail and was ultimately what helped me write this whole document and complete Task 1.2.
+
+## Task 1.
