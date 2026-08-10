@@ -64,14 +64,18 @@ def list_prompts(
 
 @app.get("/prompts/{prompt_id}", response_model=Prompt)
 def get_prompt(prompt_id: str):
-    # BUG #1: This will raise a 500 error if prompt doesn't exist
-    # because we're accessing .id on None
-    # Should return 404 instead!
+    """Retrieve a prompt by a unique identifier/
+    Args:
+        prompt_id: The unique identifier fo the prompt to retrieve.
+    Returns:
+        The prompt if found, None otherwise.
+    Raises: 
+        HTTPException: If prompt_id is empty or invalid.
+    """
     prompt = storage.get_prompt(prompt_id)
-    
-    # This line causes the bug - accessing attribute on None
-    if prompt.id:
-        return prompt
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return prompt
 
 
 @app.post("/prompts", response_model=Prompt, status_code=201)
@@ -88,6 +92,24 @@ def create_prompt(prompt_data: PromptCreate):
 
 @app.put("/prompts/{prompt_id}", response_model=Prompt)
 def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
+    """Updates an existing prompt by its ID with new field values.
+
+    Preserves the original prompt's ID and creation timestamp. The
+    updated_at timestamp is set to the current time.
+
+    Args:
+        prompt_id: The unique identifier of the prompt to update.
+        prompt_data: A PromptUpdate object containing the new title,
+            content, description, and optional collection_id.
+
+    Returns:
+        The updated Prompt object as persisted by storage.
+
+    Raises:
+        HTTPException: With status 404 if no prompt with prompt_id exists.
+        HTTPException: With status 400 if prompt_data.collection_id is
+            provided but does not correspond to an existing collection.
+    """
     existing = storage.get_prompt(prompt_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Prompt not found")
@@ -98,8 +120,6 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
     
-    # BUG #2: We're not updating the updated_at timestamp!
-    # The updated prompt keeps the old timestamp
     updated_prompt = Prompt(
         id=existing.id,
         title=prompt_data.title,
@@ -107,7 +127,7 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         description=prompt_data.description,
         collection_id=prompt_data.collection_id,
         created_at=existing.created_at,
-        updated_at=existing.updated_at  # BUG: Should be get_current_time()
+        updated_at=get_current_time()
     )
     
     return storage.update_prompt(prompt_id, updated_prompt)

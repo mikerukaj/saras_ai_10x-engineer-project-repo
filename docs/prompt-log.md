@@ -8,7 +8,7 @@
 > - Storage layer. How does it work and what are its limitations?
 > - External dependencies. What external depnendcies does this codebase rely on?
 
-## **First Response**
+### **Response**
 + This was a decent response, and certainly gave me a high level overview of the codebase and pointed out where the bugs lie that I will have to resolve in the future. 
 + Some of the most useful parts were the quick Architecture diagram it put together and the table of entry points you can see below:
 
@@ -36,3 +36,29 @@
 
 # **SECOND PROMPT**
 + The claude code resonse from the first prompt was pretty good, but I wanted a bit more detail. So I decided to test the prompt above in the browser and make some adjustmensts using the "Anatomy of an Effective Prompt" to set the stage as Claude being a Senior developer on the team onboarding me who is a junior developer and will be responsible for the codebase moving forward. Adding this context and assigning the roles to Claude helped dramatically and provided a great amount more detail and was ultimately what helped me finish writing the docs.SYSTEM_MODEL.md doc.
+
+# **THIRD PROMPT**
++ Since the first two bugs were simple changes, I manually edited the code and then asked claude code to review witht he following prompt:
+> I am addressing the bug in the highlighted function. Below is the code I implemented to address that bug - please let me know if you have any suggestions or if you believe the edit I made is optimal
+
+### **Response Bug No.1**
+> What you got right:
+>
+> You replaced the unconditional prompt.id access with a guard clause that checks before touching the object — that's the fix.
+> HTTPException(status_code=404, detail="Prompt not found") matches the pattern FastAPI expects, and it matches how update_prompt and delete_prompt already signal 404s elsewhere in this file — so your fix is consistent with the rest of the codebase, which matters as much as "it works." A reviewer should never see three different ways of returning a 404 in the same file.
+> You didn't just patch around the crash — you removed the buggy if prompt.id: line entirely rather than leaving dead code hanging around.
+> 
+> One small stylistic note, not a correctness issue:
+> if not prompt: works fine here because None is falsy. But some teams prefer if prompt is None: for two reasons: it's explicit about what you're checking (identity vs. "any falsy value"), and it protects you if prompt were ever some other type where __bool__/__len__ could make a real object evaluate as falsy (rare with Pydantic models specifically, but it's a habit worth having since you'll hit this with lists, dicts, custom classes, etc.). Either is acceptable and you'll see both in the wild — just flagging it so you know it's a deliberate choice, not something you're missing.
+
+### **Response Bug No.2**
+> Confirmed — this will crash. Here's the review:
+> 
+> The bug: updated_at=get_current_time is missing its parentheses. In Python, get_current_time (no parens) refers to the function itself as an object — it doesn't call it. You're passing the function reference into Prompt(...), not the datetime it would return.
+> 
+> What happens: Pydantic validates the field against its declared type (datetime), sees a function object instead, and raises a ValidationError. That would surface as a 500 error on every PUT /prompts/{id} request — meaning this fix as written actually makes updates worse than before (they used to silently keep a stale timestamp; now they crash outright).
+> 
+> Why this is an easy mistake to make: get_current_time and get_current_time() look almost identical at a glance, and it's especially sneaky here because right above it, created_at=existing.created_at is also just a bare name with no parens — so your eye pattern-matches "bare name = fine" from the line right next to it, even though that line is accessing an attribute on an object, not calling a function.
+> 
+> The fix:
+> updated_at=get_current_time()	 

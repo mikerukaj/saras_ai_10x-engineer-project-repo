@@ -99,5 +99,7 @@ flowchart TD
 ## Task 1.2
 + For the first prompt, I made a general prompt along the lines of "You are a developer that just inherited this baserepo. Please explore this repo and discuss the following:" and then listed the parts I wanted to be brought up to speed on (i.e. architecture, data flow, etc.).
 + The first response was good, but I wanted some more detail, I decided to use clause in the web browser and follow the "Anatomy of an Effective Prompt" documentation. This method provided even more detail and was ultimately what helped me write this whole document and complete Task 1.2.
++ Afer the general prompt in my claude browser session, I narrowed the context and asked claude to explain the tests to me so I would know how to properly test whether my changes were breaking things or working.
 
-## Task 1.
+## Task 1.4
++ I wanted AI to help me write the docstring for this function I edited, so I highlighted the function in the file and asked Claude Code (plan mode) to write a Google-style docsting with Args, Returns, and Raises in alignment with the actual implementaiton of the function.
