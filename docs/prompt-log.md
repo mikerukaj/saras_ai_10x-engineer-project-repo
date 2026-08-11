@@ -92,3 +92,43 @@
 > 
 >     storage.delete_collection(collection_id)
 >     return None
+
+# **SIXTH PROMPT**
+> The developer left a comment instructing us to add the missing endpoint. The new endpoint should follow the following constraints:
+> - Implement PATCH /prompts/{id} for partial updates
+> - Only update the fields provided. Do not require all fields the way PUT does.
+> - Update updated_at function
+> - Return 404 for non-existent prompt
+> - Follow same coding pattern in rest of codebase
+
+### **Response**
++ backend/app/models.py
+> class PromptPatch(BaseModel):
+>    title: Optional[str] = Field(None, min_length=1, max_length=200)
+>    content: Optional[str] = Field(None, min_length=1)
+>    description: Optional[str] = Field(None, max_length=500)
+>    collection_id: Optional[str] = None
+
++ backend/app/api.py
+> @app.patch("/prompts/{prompt_id}", response_model=Prompt)
+> def patch_prompt(prompt_id: str, prompt_data: PromptPatch):
+>     existing = storage.get_prompt(prompt_id)
+>     if not existing:
+>         raise HTTPException(status_code=404, detail="Prompt not found")
+> 
+>     patch = prompt_data.model_dump(exclude_unset=True)
+> 
+>     if "collection_id" in patch and patch["collection_id"] is not None:
+>         if not storage.get_collection(patch["collection_id"]):
+>             raise HTTPException(status_code=400, detail="Collection not found")
+> 
+>     updated_prompt = Prompt(
+>         id=existing.id,
+>         title=patch.get("title", existing.title),
+>         content=patch.get("content", existing.content),
+>         description=patch.get("description", existing.description),
+>         collection_id=patch.get("collection_id", existing.collection_id),
+>         created_at=existing.created_at,
+>         updated_at=get_current_time()
+>     )
+>     return storage.update_prompt(prompt_id, updated_prompt)

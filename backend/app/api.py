@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
 from app.models import (
-    Prompt, PromptCreate, PromptUpdate,
+    Prompt, PromptCreate, PromptUpdate, PromptPatch,
     Collection, CollectionCreate,
     PromptList, CollectionList, HealthResponse,
     get_current_time
@@ -133,8 +133,46 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
     return storage.update_prompt(prompt_id, updated_prompt)
 
 
-# NOTE: PATCH endpoint is missing! Students need to implement this.
-# It should allow partial updates (only update provided fields)
+@app.patch("/prompts/{prompt_id}", response_model=Prompt)
+def patch_prompt(prompt_id: str, prompt_data: PromptPatch):
+    """Partially updates an existing prompt, changing only the provided fields.
+
+    Fields omitted from the request body are left unchanged. The updated_at
+    timestamp is always refreshed on a successful update.
+
+    Args:
+        prompt_id: The unique identifier of the prompt to update.
+        prompt_data: A PromptPatch object containing any subset of title,
+            content, description, and collection_id to update.
+
+    Returns:
+        The updated Prompt object as persisted by storage.
+
+    Raises:
+        HTTPException: With status 404 if no prompt with prompt_id exists.
+        HTTPException: With status 400 if collection_id is explicitly provided
+            and does not correspond to an existing collection.
+    """
+    existing = storage.get_prompt(prompt_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    patch = prompt_data.model_dump(exclude_unset=True)
+
+    if "collection_id" in patch and patch["collection_id"] is not None:
+        if not storage.get_collection(patch["collection_id"]):
+            raise HTTPException(status_code=400, detail="Collection not found")
+
+    updated_prompt = Prompt(
+        id=existing.id,
+        title=patch.get("title", existing.title),
+        content=patch.get("content", existing.content),
+        description=patch.get("description", existing.description),
+        collection_id=patch.get("collection_id", existing.collection_id),
+        created_at=existing.created_at,
+        updated_at=get_current_time()
+    )
+    return storage.update_prompt(prompt_id, updated_prompt)
 
 
 @app.delete("/prompts/{prompt_id}", status_code=204)
