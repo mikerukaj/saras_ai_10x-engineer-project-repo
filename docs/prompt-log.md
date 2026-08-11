@@ -62,3 +62,33 @@
 > 
 > The fix:
 > updated_at=get_current_time()	 
+
+# **FOURTH PROMPT**
+> The highlighted sort_prompts_by_date function should be sorted in descending order (newest first). Please edit the code to address this issue
+
+### **Response Bug No.3**
+> def sort_prompts_by_date(prompts: List[Prompt], descending: bool = True) -> List[Prompt]:
+>    """Sort prompts by creation date."""
+>    return sorted(prompts, key=lambda p: p.created_at, reverse=descending)
+
+# **FIFTH PROMPT**
+> The highlighted funcion deletes a collection, but leaves the prompts associated with the collection with an invalid connection_id. Decidde which strategy is bes - delete the prompts, set collectin_id to None, or prevent deletion. Once the decision is made, write the code to implement this fix
+
+### **Response Bug No.4**
+> def delete_collection(collection_id: str):
+>     if not storage.get_collection(collection_id):
+>         raise HTTPException(status_code=404, detail="Collection not found")
+> 
+>     for prompt in storage.get_prompts_by_collection(collection_id):
+>         storage.update_prompt(prompt.id, Prompt(
+>             id=prompt.id,
+>             title=prompt.title,
+>             content=prompt.content,
+>             description=prompt.description,
+>             collection_id=None,
+>             created_at=prompt.created_at,
+>             updated_at=get_current_time()
+>         ))
+> 
+>     storage.delete_collection(collection_id)
+>     return None

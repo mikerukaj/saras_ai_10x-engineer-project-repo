@@ -103,3 +103,9 @@ flowchart TD
 
 ## Task 1.4
 + I wanted AI to help me write the docstring for this function I edited, so I highlighted the function in the file and asked Claude Code (plan mode) to write a Google-style docsting with Args, Returns, and Raises in alignment with the actual implementaiton of the function.
+## Task 1.5
++ I highlighted the identified bug in utils.py and provided the following prompt to Claude Code:
+> def sort_prompts_by_date(prompts: List[Prompt], descending: bool = True) -> List[Prompt]:
+>    """Sort prompts by creation date."""
+>    return sorted(prompts, key=lambda p: p.created_at, reverse=descending)
+
