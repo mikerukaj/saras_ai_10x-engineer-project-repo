@@ -109,3 +109,5 @@ flowchart TD
 >    """Sort prompts by creation date."""
 >    return sorted(prompts, key=lambda p: p.created_at, reverse=descending)
 
+## Miscellaneous
++ Whenever I directly needed to modify an endpoint I would highlight the endpoint so Claude Code would tighten the context. This is after I had already prompted claude code to review the repo and answer Task 1.2. 
