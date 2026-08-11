@@ -1,4 +1,4 @@
-# **MISTAKE FOUND**
+# **MISTAKE FOUND No.1**
 + See "FIFTH PROMPT" in docs/prompt-log.md
 ### Output of "FIFTH PROMPT" in docs/prompt-log.md
 > def delete_collection(collection_id: str):
@@ -27,3 +27,6 @@
 ### How I found the error
 + Luckily, the tests was failing even though the output of the test was what I was looking for. This caused me to look into the tests_api.py file more thouroughly.
 + Moving forward, I will be sure to provide more constraints/instruction in my prompts to make sure the tests are accounted for.
+
+# **MISTAKE FOUND No.2**
++ When reviewing the output of the "SIXTH PROMPT" in docs/prompt-log.md, I noticed that well all teh code looked correct, Clauded added a class to models.py, but did add the class it created to the imports of api.py
