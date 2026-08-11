@@ -68,9 +68,9 @@ def get_prompt(prompt_id: str):
     Args:
         prompt_id: The unique identifier fo the prompt to retrieve.
     Returns:
-        The prompt if found, None otherwise.
+        The prompt if found, raises exception otherwise.
     Raises: 
-        HTTPException: If prompt_id is empty or invalid.
+        HTTPException: If prompt_id is not found.
     """
     prompt = storage.get_prompt(prompt_id)
     if not prompt:
