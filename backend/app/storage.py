@@ -61,6 +61,21 @@ class Storage:
     # ============== Utility ==============
     
     def clear(self):
+        """Remove all stored prompts and collections.
+
+        Resets the in-memory storage to an empty state, discarding all
+        prompts and collections that have been created.
+
+        Returns:
+            None
+
+        Example:
+            >>> storage = Storage()
+            >>> storage.create_prompt(Prompt(id="1", ...))
+            >>> storage.clear()
+            >>> storage.get_all_prompts()
+            []
+        """
         self._prompts.clear()
         self._collections.clear()
 
