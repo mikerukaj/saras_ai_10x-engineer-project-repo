@@ -35,6 +35,16 @@ app.add_middleware(
 
 @app.get("/health", response_model=HealthResponse)
 def health_check():
+    """Report the API's current health status and version.
+
+    Returns:
+        HealthResponse: An object with status set to "healthy" and the
+            running application version.
+
+    Example:
+        >>> health_check()
+        HealthResponse(status='healthy', version='1.0.0')
+    """
     return HealthResponse(status="healthy", version=__version__)
 
 
@@ -45,6 +55,23 @@ def list_prompts(
     collection_id: Optional[str] = None,
     search: Optional[str] = None
 ):
+    """List prompts, optionally filtered by collection and/or search text.
+
+    Results are sorted by creation date, newest first.
+
+    Args:
+        collection_id (Optional[str]): If provided, only prompts belonging
+            to this collection are included.
+        search (Optional[str]): If provided, only prompts whose title or
+            description contain this text (case-insensitive) are included.
+
+    Returns:
+        PromptList: The matching prompts and the total count.
+
+    Example:
+        >>> list_prompts(search="email")
+        PromptList(prompts=[...], total=2)
+    """
     prompts = storage.get_all_prompts()
     
     # Filter by collection if specified
@@ -80,6 +107,24 @@ def get_prompt(prompt_id: str):
 
 @app.post("/prompts", response_model=Prompt, status_code=201)
 def create_prompt(prompt_data: PromptCreate):
+    """Create a new prompt.
+
+    Args:
+        prompt_data (PromptCreate): The title, content, and optional
+            description and collection_id for the new prompt.
+
+    Returns:
+        Prompt: The newly created prompt, with a generated id and
+            creation/update timestamps.
+
+    Raises:
+        HTTPException: With status 400 if prompt_data.collection_id is
+            provided but does not correspond to an existing collection.
+
+    Example:
+        >>> create_prompt(PromptCreate(title="Greeting", content="Hello!"))
+        Prompt(id='...', title='Greeting', content='Hello!', ...)
+    """
     # Validate collection exists if provided
     if prompt_data.collection_id:
         collection = storage.get_collection(prompt_data.collection_id)
@@ -177,6 +222,20 @@ def patch_prompt(prompt_id: str, prompt_data: PromptPatch):
 
 @app.delete("/prompts/{prompt_id}", status_code=204)
 def delete_prompt(prompt_id: str):
+    """Delete a prompt by its unique identifier.
+
+    Args:
+        prompt_id (str): The unique identifier of the prompt to delete.
+
+    Returns:
+        None: No content is returned on successful deletion.
+
+    Raises:
+        HTTPException: With status 404 if no prompt with prompt_id exists.
+
+    Example:
+        >>> delete_prompt("abc-123")
+    """
     if not storage.delete_prompt(prompt_id):
         raise HTTPException(status_code=404, detail="Prompt not found")
     return None
@@ -186,12 +245,38 @@ def delete_prompt(prompt_id: str):
 
 @app.get("/collections", response_model=CollectionList)
 def list_collections():
+    """List all collections.
+
+    Returns:
+        CollectionList: All stored collections and the total count.
+
+    Example:
+        >>> list_collections()
+        CollectionList(collections=[...], total=3)
+    """
     collections = storage.get_all_collections()
     return CollectionList(collections=collections, total=len(collections))
 
 
 @app.get("/collections/{collection_id}", response_model=Collection)
 def get_collection(collection_id: str):
+    """Retrieve a collection by its unique identifier.
+
+    Args:
+        collection_id (str): The unique identifier of the collection to
+            retrieve.
+
+    Returns:
+        Collection: The matching collection.
+
+    Raises:
+        HTTPException: With status 404 if no collection with collection_id
+            exists.
+
+    Example:
+        >>> get_collection("abc-123")
+        Collection(id='abc-123', name='My Collection', ...)
+    """
     collection = storage.get_collection(collection_id)
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -200,12 +285,46 @@ def get_collection(collection_id: str):
 
 @app.post("/collections", response_model=Collection, status_code=201)
 def create_collection(collection_data: CollectionCreate):
+    """Create a new collection.
+
+    Args:
+        collection_data (CollectionCreate): The name and optional
+            description for the new collection.
+
+    Returns:
+        Collection: The newly created collection, with a generated id and
+            creation timestamp.
+
+    Example:
+        >>> create_collection(CollectionCreate(name="My Collection"))
+        Collection(id='...', name='My Collection', ...)
+    """
     collection = Collection(**collection_data.model_dump())
     return storage.create_collection(collection)
 
 
 @app.delete("/collections/{collection_id}", status_code=204)
 def delete_collection(collection_id: str):
+    """Delete a collection by its unique identifier.
+
+    Any prompts assigned to this collection are unassigned (their
+    collection_id is set to None) rather than deleted, before the
+    collection itself is removed.
+
+    Args:
+        collection_id (str): The unique identifier of the collection to
+            delete.
+
+    Returns:
+        None: No content is returned on successful deletion.
+
+    Raises:
+        HTTPException: With status 404 if no collection with collection_id
+            exists.
+
+    Example:
+        >>> delete_collection("abc-123")
+    """
     if not storage.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
 
