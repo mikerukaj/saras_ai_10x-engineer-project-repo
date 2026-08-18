@@ -82,6 +82,73 @@ A prompt engineer using the web interface day-to-day wants it to feel consistent
 
 ---
 
+### User Story 5 - Save and restore prompt versions (Priority: P5)
+
+A prompt engineer iterating on a prompt's wording wants every save to be automatically
+recoverable, wants to browse how a prompt's content changed over time, and wants to restore an
+earlier version in one action — so refining a prompt never risks losing wording that turned out
+to be better than a later edit.
+
+**Why this priority**: This adds safety and confidence to the editing workflow User Story 1
+already delivers, but is not required for the interface to be usable end-to-end — it builds on
+US1's edit flow rather than blocking it.
+
+**Independent Test**: Edit a prompt's content twice via the web interface, open its version
+history, confirm three versions exist (original plus two edits), restore the first version, and
+confirm the prompt's current content matches it. Full detail in
+[specs/prompt-versions.md](../prompt-versions.md).
+
+**Acceptance Scenarios**:
+
+1. **Given** a prompt is created or its title, content, or description is edited and saved,
+   **When** the save succeeds, **Then** the prior state is automatically captured as a
+   recoverable version, with no extra action from the user.
+2. **Given** a prompt with multiple saved versions, **When** the user views its version history
+   from the web interface, **Then** they see each version listed newest-first and can open any
+   one to see its full content.
+3. **Given** an earlier version of a prompt, **When** the user chooses to restore it, **Then**
+   the prompt's current title, content, and description become that version's values (its
+   collection assignment is unaffected), and the state just before the restore is itself saved
+   as a new version.
+4. **Given** an existing prompt, **When** the user deletes it, **Then** all of its saved versions
+   are removed along with it.
+
+---
+
+### User Story 6 - Tag prompts for cross-cutting organization (Priority: P6)
+
+A prompt engineer wants to label prompts with short, reusable tags (e.g., "needs-review",
+"gpt4-formatting") that cut across collections, so prompts can be organized and found by more
+than one dimension at once, and can rename or remove a tag once and have it apply everywhere the
+tag is used.
+
+**Why this priority**: This adds a second, complementary organization axis to the collection
+system User Story 1 already delivers; it's independently useful but not required for the
+interface's core CRUD flows to work, so it's scoped after the higher-priority stories.
+
+**Independent Test**: Create two prompts and tag them with a shared tag and a unique tag each,
+filter the prompt list by the shared tag and confirm both appear, rename the shared tag and
+confirm both prompts show the new name, then delete one prompt and confirm the shared tag still
+exists and is still attached to the remaining prompt. Full detail in
+[specs/tagging-system.md](../tagging-system.md).
+
+**Acceptance Scenarios**:
+
+1. **Given** the create or edit prompt form, **When** the user supplies one or more tag names
+   (existing or new) and saves, **Then** the prompt carries exactly those tags, with any
+   not-yet-existing tag created automatically and any existing tag (matched regardless of
+   capitalization) reused rather than duplicated.
+2. **Given** prompts carrying various tags, **When** the user filters the prompt list by one or
+   more tags, **Then** only prompts carrying at least one of the selected tags are shown.
+3. **Given** a tag applied to multiple prompts, **When** the user renames it, **Then** every
+   prompt carrying it shows the new name.
+4. **Given** a tag applied to one or more prompts, **When** the user deletes the tag or deletes
+   one of the prompts carrying it, **Then** only that link is removed — the tag continues to
+   exist for any other prompt still using it, and the prompt continues to exist with its
+   remaining tags and other fields intact.
+
+---
+
 ### Edge Cases
 
 - What happens when the web interface tries to load data but the backend is unreachable or returns an error?
@@ -92,6 +159,10 @@ A prompt engineer using the web interface day-to-day wants it to feel consistent
 - How does the deployment pipeline behave when a change passes tests but the packaging/build step itself fails?
 - What happens when the same prompt is edited from two different browser tabs/sessions at nearly the same time?
 - What happens when the persistent data store is unavailable or fails to start when the application starts up?
+- What happens when a prompt is edited but only its collection assignment changes (no wording change)? See [specs/prompt-versions.md](../prompt-versions.md) for the full answer (no redundant version is created).
+- What happens to a prompt's saved versions when the prompt itself is deleted? See [specs/prompt-versions.md](../prompt-versions.md) (versions are deleted along with it, unlike collection-unassignment on collection delete).
+- What happens when a user tags a prompt with a tag name that already exists under different capitalization, or renames a tag to a name already used by another tag? See [specs/tagging-system.md](../tagging-system.md) (case-insensitive reuse when tagging; an explicit, non-silent collision error when renaming).
+- What happens to a tag's other prompts when one prompt carrying it is deleted, or to a prompt's other tags when one tag is deleted? See [specs/tagging-system.md](../tagging-system.md) (only the specific link is removed; the tag and the prompt otherwise persist independently).
 
 ## Requirements *(mandatory)*
 
@@ -137,10 +208,36 @@ A prompt engineer using the web interface day-to-day wants it to feel consistent
 - **FR-024**: The web interface MUST remain usable — all core actions reachable and readable without horizontal scrolling — on both standard desktop-width and mobile-width screens.
 - **FR-025**: The web interface MUST apply a consistent layout, typography, and color scheme across all of its screens.
 
+**Prompt version history**
+
+Full detail (data model, API endpoints, error conditions) is specified in
+[specs/prompt-versions.md](../prompt-versions.md); the requirements below are the summary that
+belongs to this feature's scope.
+
+- **FR-026**: The system MUST automatically capture a recoverable version of a prompt's title, content, and description whenever a prompt is created or one of those fields changes on an edit.
+- **FR-027**: Users MUST be able to view a prompt's version history (ordered newest first) and inspect the full title, content, and description of any past version, from the web interface.
+- **FR-028**: Users MUST be able to restore a prompt to a previous version, which updates its current title, content, and description to that version's values without changing its collection assignment.
+- **FR-029**: The system MUST delete a prompt's saved versions when the prompt itself is deleted.
+- **FR-030**: Users MUST be able to explicitly save a labeled checkpoint version of a prompt's current state, and delete an individual past version, from the web interface.
+
+**Prompt tagging**
+
+Full detail (data model, API endpoints, error conditions) is specified in
+[specs/tagging-system.md](../tagging-system.md); the requirements below are the summary that
+belongs to this feature's scope.
+
+- **FR-031**: Users MUST be able to attach any number of tags to a prompt from the create/edit form, with a not-yet-existing tag name creating a new tag automatically and an existing tag name (matched case-insensitively) being reused rather than duplicated.
+- **FR-032**: Users MUST be able to filter the prompt list by one or more tags from the web interface, showing prompts carrying at least one of the selected tags.
+- **FR-033**: Users MUST be able to browse the full list of tags in use, each showing how many prompts carry it, from the web interface.
+- **FR-034**: Users MUST be able to rename a tag, with the new name reflected on every prompt that carries it, and delete a tag, which removes it from every prompt that carried it without deleting those prompts.
+- **FR-035**: Deleting a prompt MUST remove its tag links without deleting the tags themselves, and deleting a tag MUST remove its links without deleting the prompts that carried it.
+
 ### Key Entities
 
-- **Prompt**: A reusable piece of AI-facing text with a title, content (which may contain `{{variable}}`-style placeholders), an optional description, and an optional collection assignment. Tracks when it was created and last updated. Persists across application restarts.
+- **Prompt**: A reusable piece of AI-facing text with a title, content (which may contain `{{variable}}`-style placeholders), an optional description, an optional collection assignment, and zero or more tags. Tracks when it was created and last updated. Persists across application restarts.
 - **Collection**: A named grouping of prompts (e.g., "Marketing", "Development") with an optional description. Deleting a collection unassigns, rather than deletes, the prompts that belonged to it. Persists across application restarts.
+- **PromptVersion**: A historical snapshot of one prompt's title, content, and description at a point in time, with a sequential version number, an optional user-supplied label, and a creation timestamp. Belongs to exactly one prompt; deleted along with it. See [specs/prompt-versions.md](../prompt-versions.md).
+- **Tag**: A short, reusable label (unique case-insensitively) that can be attached to any number of prompts, independent of collection assignment. Deleting a tag unassigns it from every prompt that carried it, rather than deleting those prompts. See [specs/tagging-system.md](../tagging-system.md).
 
 ## Success Criteria *(mandatory)*
 
@@ -154,6 +251,10 @@ A prompt engineer using the web interface day-to-day wants it to feel consistent
 - **SC-006**: All core actions (search, create, edit, delete, for both prompts and collections) remain fully completable on a mobile-width (375px) screen as well as a standard desktop window.
 - **SC-007**: In a moderated usability check, 90% of participants can create, find, edit, and delete a prompt using only the web interface, without external help.
 - **SC-008**: Data created or edited through the web interface remains available and unchanged after the application is restarted or redeployed.
+- **SC-009**: A user can restore a prompt to any version shown in its history in under 15 seconds from opening that prompt's version history.
+- **SC-010**: 100% of prompt edits that change title, content, or description produce a recoverable version, verified by an automated test that can be run without manual steps.
+- **SC-011**: A user can tag a prompt with a new or existing tag and see it filterable from the prompt list in under 30 seconds, without leaving the create/edit form to set up the tag first.
+- **SC-012**: Renaming a tag used by multiple prompts updates 100% of those prompts' displayed tag name with no additional per-prompt action, verified by an automated test.
 
 ## Assumptions
 
@@ -164,6 +265,8 @@ A prompt engineer using the web interface day-to-day wants it to feel consistent
 - Visual/branding decisions (exact color palette, font choices, logo) are left to implementation-time design judgment as long as FR-025's consistency requirement is met; this spec does not mandate a specific visual identity.
 - "Deployment" for this feature means a reliable, single-command local/self-hosted run (e.g., on a developer's or self-hoster's own machine); provisioning or maintaining a live, publicly reachable hosted environment is out of scope and would be a separate, future feature.
 - The specific persistent storage technology (e.g., an embedded file-based database vs. a separate database server) is an implementation decision made during planning, not this specification.
+- Prompt version history (User Story 5) only versions `title`, `content`, and `description` — not collection assignment — and places no limit on the number of versions retained per prompt for this feature; see [specs/prompt-versions.md](../prompt-versions.md) Assumptions for the full rationale.
+- Tags (User Story 6) are first-class, shared records (not free text repeated per prompt), matched case-insensitively, with no limit on tags per prompt or total tags for this feature; see [specs/tagging-system.md](../tagging-system.md) Assumptions for the full rationale.
 
 ## Clarifications
 
@@ -172,3 +275,11 @@ A prompt engineer using the web interface day-to-day wants it to feel consistent
 - Q: What should "CI/CD and Docker for deployment" actually produce? → A: A reliable, single-command local/self-hosted run on any machine with the documented container prerequisites installed. No live hosted environment is provisioned or maintained as part of this feature.
 - Q: Should this feature add persistent data storage, or keep the current in-memory storage? → A: Add persistent storage — prompt and collection data must survive an application restart or redeployment.
 - Q: What test coverage counts as "comprehensive" for this feature? → A: Unit, integration, and contract tests for both backend and frontend, plus full end-to-end tests that drive a real browser through complete user journeys.
+
+### Session 2026-08-17 (Prompt version history added)
+
+- Q: Should editing a prompt overwrite its prior wording permanently, or should past wording be recoverable? → A: Recoverable — add automatic, per-edit version history plus manual checkpoint/restore/delete actions, detailed in [specs/prompt-versions.md](../prompt-versions.md).
+
+### Session 2026-08-17 (Prompt tagging added)
+
+- Q: Should tags be free-text strings stored per prompt, or first-class shared records? → A: First-class `Tag` entities, many-to-many with prompts, matched case-insensitively so near-duplicate tags aren't created and a rename applies everywhere at once — detailed in [specs/tagging-system.md](../tagging-system.md).

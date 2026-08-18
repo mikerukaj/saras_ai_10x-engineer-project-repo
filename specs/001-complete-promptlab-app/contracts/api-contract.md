@@ -30,6 +30,44 @@ The backend also serves a live, authoritative machine-readable version of this c
 | POST | `/collections` | `CollectionCreate` body | `201 Collection` \| `422` | FR-007 (create) |
 | DELETE | `/collections/{collection_id}` | — | `204` \| `404` | FR-007 (delete); backend already unassigns affected prompts before deleting, satisfying FR-008 without frontend-side special-casing |
 
+## Prompt Versions
+
+Added by the [prompt version history feature](../../prompt-versions.md) — see that document for
+full request/response shapes and error conditions. Summary:
+
+| Method | Path | Request | Response | Supports |
+|---|---|---|---|---|
+| GET | `/prompts/{prompt_id}/versions` | — | `200 { versions: PromptVersion[], total }` \| `404` | FR-027 (browse history) |
+| GET | `/prompts/{prompt_id}/versions/{version_id}` | — | `200 PromptVersion` \| `404` | FR-027 (inspect a past version) |
+| POST | `/prompts/{prompt_id}/versions` | `{ label? }` | `201 PromptVersion` \| `404` \| `422` | FR-030 (manual checkpoint) |
+| POST | `/prompts/{prompt_id}/versions/{version_id}/restore` | — | `200 Prompt` \| `404` | FR-028 (restore) |
+| DELETE | `/prompts/{prompt_id}/versions/{version_id}` | — | `204` \| `404` | FR-030 (prune history) |
+
+`POST /prompts` and `DELETE /prompts/{id}` (above) gain non-breaking side effects — creating
+version 1 on prompt creation, and cascade-deleting versions on prompt deletion, respectively —
+with no change to their existing request/response shapes.
+
+## Tags
+
+Added by the [prompt tagging feature](../../tagging-system.md) — see that document for full
+request/response shapes and error conditions. Summary:
+
+| Method | Path | Request | Response | Supports |
+|---|---|---|---|---|
+| GET | `/tags` | — | `200 { tags: Tag[], total } ` | FR-033 (browse tags with usage counts) |
+| GET | `/tags/{tag_id}` | — | `200 Tag` \| `404` | Supporting detail lookups if needed |
+| POST | `/tags` | `{ name }` | `201 Tag` \| `409` (name collision) \| `422` | CRUD symmetry (explicit tag creation) |
+| PATCH | `/tags/{tag_id}` | `{ name }` | `200 Tag` \| `404` \| `409` \| `422` | FR-034 (rename, applies everywhere) |
+| DELETE | `/tags/{tag_id}` | — | `204` \| `404` | FR-034 (delete, unassigns rather than cascades) |
+
+`GET /prompts` gains an optional `tags` query parameter (comma-separated names, OR match,
+combinable with the existing `collection_id`/`search` params) — FR-032. `POST /prompts`,
+`PUT /prompts/{id}`, and `PATCH /prompts/{id}` gain an optional `tags` request field (tag name
+strings, resolved via case-insensitive get-or-create) — FR-031. Every `Prompt` response object
+(list and detail) now includes a `tags: Tag[]` field. `DELETE /prompts/{id}` gains a non-breaking
+side effect — removing the deleted prompt's tag links without deleting the `Tag` records — with
+no change to its existing `204`/`404` shape.
+
 ## Data shapes referenced above
 
 Defined in `backend/app/models.py` (already documented there with Google-style docstrings):
