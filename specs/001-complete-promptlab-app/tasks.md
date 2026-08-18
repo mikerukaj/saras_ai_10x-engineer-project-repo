@@ -6,7 +6,7 @@ description: "Task list for Complete PromptLab Application"
 # Tasks: Complete PromptLab Application
 
 **Input**: Design documents from `/specs/001-complete-promptlab-app/`
-**Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/api-contract.md](./contracts/api-contract.md), [quickstart.md](./quickstart.md)
+**Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/api-contract.md](./contracts/api-contract.md), [quickstart.md](./quickstart.md), [../prompt-versions.md](../prompt-versions.md) (Phase 8 / User Story 5 only), [../tagging-system.md](../tagging-system.md) (Phase 9 / User Story 6 only)
 
 **Tests**: The spec's User Story 2 (P2) makes comprehensive automated test coverage a first-class deliverable (FR-013–FR-017), so test-writing tasks are included as that story's implementation, not as optional TDD scaffolding for the other stories.
 
@@ -143,6 +143,62 @@ Matches [plan.md](./plan.md)'s Project Structure: `backend/app/`, `backend/tests
 
 ---
 
+## Phase 8: User Story 5 - Save and restore prompt versions (Priority: P5)
+
+**Goal**: Every prompt edit is automatically captured as a recoverable version, with browsing, restore, manual checkpoint, and delete actions. Full detail: [specs/prompt-versions.md](../prompt-versions.md).
+
+**Independent Test**: Edit a prompt's content twice via the web interface, open its version history, confirm three versions exist (original plus two edits), restore the first version, and confirm the prompt's current content matches it.
+
+**Note**: Placed last only because it's the lowest priority (P5) — it has no technical dependency on Phase 7 (Polish) and can be implemented any time after User Story 1's prompt detail/edit pages exist.
+
+- [ ] T049 [P] [US5] Add `PromptVersion` Pydantic models (`PromptVersion`, `PromptVersionCreate`, `PromptVersionList`) to `backend/app/models.py`, matching the field table in [prompt-versions.md](../prompt-versions.md#data-model-changes-needed)
+- [ ] T050 [US5] Add a `PromptVersion` SQLModel table to `backend/app/database.py` with a foreign key to `Prompt.id` and cascade delete (depends on T049, T005)
+- [ ] T051 [US5] Add version storage methods (`create_version`, `get_version`, `get_versions_by_prompt`, `delete_version`) to `backend/app/storage.py` (depends on T050)
+- [ ] T052 [US5] Update `create_prompt` in `backend/app/api.py` to also create version 1 for the new prompt (depends on T051)
+- [ ] T053 [US5] Update `update_prompt`/`patch_prompt` in `backend/app/api.py` to snapshot the prompt's pre-update state as a new version whenever `title`, `content`, or `description` changes (FR-026) (depends on T051)
+- [ ] T054 [US5] Update `delete_prompt` in `backend/app/api.py` to cascade-delete the prompt's versions (FR-029) (depends on T051)
+- [ ] T055 [US5] Add `GET /prompts/{id}/versions`, `GET /prompts/{id}/versions/{version_id}`, `POST /prompts/{id}/versions`, `POST /prompts/{id}/versions/{version_id}/restore`, and `DELETE /prompts/{id}/versions/{version_id}` endpoints to `backend/app/api.py`, matching [prompt-versions.md](../prompt-versions.md#api-endpoints) (depends on T051)
+- [ ] T056 [P] [US5] Add backend tests for version capture, restore, cascade delete, and the cross-prompt-version-id 404 case to `backend/tests/test_api.py` (depends on T052, T053, T054, T055)
+- [ ] T057 [US5] Regenerate frontend API types (`frontend/src/api/schema.ts`) and extend the typed client in `frontend/src/api/client.ts` to cover the new version endpoints (depends on T055, T010)
+- [ ] T058 [US5] Build a version history panel on `frontend/src/pages/PromptDetailPage.tsx` listing versions newest-first with number, timestamp, and label (depends on T057, T018)
+- [ ] T059 [US5] Build a version detail view showing a past version's full title/content/description, reachable from the history panel (depends on T058)
+- [ ] T060 [US5] Add a restore action (with confirmation) wired to `POST /prompts/{id}/versions/{version_id}/restore` (depends on T059)
+- [ ] T061 [P] [US5] Add a "save checkpoint" action (optional label input) wired to `POST /prompts/{id}/versions`, and a delete-version action (with confirmation) wired to `DELETE /prompts/{id}/versions/{version_id}` (depends on T058)
+- [ ] T062 [P] [US5] Add Vitest tests for the version history panel, restore, checkpoint, and delete flows in `frontend/tests/pages/PromptDetailPage.test.tsx` (depends on T060, T061)
+- [ ] T063 [US5] Add a Playwright e2e spec covering edit → view history → restore in `frontend/e2e/prompt-version-history.spec.ts` (depends on T030, T060)
+
+**Checkpoint**: A prompt's edits are automatically recoverable, its history can be browsed and restored, and checkpoint/delete actions work end-to-end.
+
+---
+
+## Phase 9: User Story 6 - Tag prompts for cross-cutting organization (Priority: P6)
+
+**Goal**: Prompts can carry any number of shared, reusable tags — attached via the create/edit form, filterable from the prompt list, and manageable (renamed/deleted) from a dedicated tags view. Full detail: [specs/tagging-system.md](../tagging-system.md).
+
+**Independent Test**: Create two prompts and tag them with a shared tag and a unique tag each, filter the prompt list by the shared tag and confirm both appear, rename the shared tag and confirm both prompts show the new name, then delete one prompt and confirm the shared tag still exists and is still attached to the remaining prompt.
+
+**Note**: Placed last only because it's the lowest priority (P6) — it has no technical dependency on Phase 7/8 and can be implemented any time after User Story 1's prompt create/edit/list pages exist.
+
+- [ ] T064 [P] [US6] Add `Tag` Pydantic models (`Tag`, `TagCreate`, `TagRename`, `TagList`) to `backend/app/models.py`, and add an optional `tags: List[str]` field to `PromptCreate`/`PromptUpdate`/`PromptPatch` and a `tags: List[Tag]` field to `Prompt`, matching [tagging-system.md](../tagging-system.md#data-model-changes-needed)
+- [ ] T065 [US6] Add a `Tag` SQLModel table and a `PromptTag` many-to-many join table to `backend/app/database.py` (depends on T064, T005)
+- [ ] T066 [US6] Add tag storage methods (`create_tag`, `get_tag`, `get_tag_by_name_case_insensitive`, `get_all_tags_with_counts`, `rename_tag`, `delete_tag`, `set_prompt_tags` with get-or-create-and-link semantics) to `backend/app/storage.py` (depends on T065)
+- [ ] T067 [US6] Update `create_prompt`, `update_prompt`, and `patch_prompt` in `backend/app/api.py` to resolve a request's `tags` field via case-insensitive get-or-create and attach it to the prompt (FR-031) (depends on T066)
+- [ ] T068 [US6] Update `delete_prompt` in `backend/app/api.py` to remove the deleted prompt's tag links without deleting the `Tag` records (FR-035) (depends on T066)
+- [ ] T069 [US6] Add a `tags` query parameter (comma-separated names, OR match) to `list_prompts` in `backend/app/api.py` (FR-032) (depends on T066)
+- [ ] T070 [US6] Add `POST /tags`, `GET /tags`, `GET /tags/{tag_id}`, `PATCH /tags/{tag_id}`, and `DELETE /tags/{tag_id}` endpoints to `backend/app/api.py`, matching [tagging-system.md](../tagging-system.md#api-endpoints) (depends on T066)
+- [ ] T071 [P] [US6] Add backend tests for case-insensitive tag reuse, rename-collision (`409`), tag/prompt deletion unlinking (not cascading), and the `tags` filter's OR semantics to `backend/tests/test_api.py` (depends on T067, T068, T069, T070)
+- [ ] T072 [US6] Regenerate frontend API types (`frontend/src/api/schema.ts`) and extend the typed client in `frontend/src/api/client.ts` to cover the updated `Prompt` shape and new tag endpoints (depends on T070, T010)
+- [ ] T073 [P] [US6] Build a tag input component (type-to-create-or-select) in `frontend/src/components/TagInput.tsx`, used in the create and edit prompt forms (depends on T072)
+- [ ] T074 [US6] Show a prompt's tags on `frontend/src/pages/PromptListPage.tsx` and `frontend/src/pages/PromptDetailPage.tsx` (depends on T072, T014, T018)
+- [ ] T075 [US6] Add a tag filter control to the prompt list page wired to `GET /prompts?tags=` in `frontend/src/pages/PromptListPage.tsx` (FR-032) (depends on T074)
+- [ ] T076 [US6] Build a tags management page — list tags with `prompt_count`, rename, delete (with confirmation) — in `frontend/src/pages/TagsPage.tsx` (FR-033, FR-034) (depends on T072, T012)
+- [ ] T077 [P] [US6] Add Vitest tests for the tag input component and tags management page in `frontend/tests/components/TagInput.test.tsx` and `frontend/tests/pages/TagsPage.test.tsx` (depends on T073, T076)
+- [ ] T078 [US6] Add a Playwright e2e spec covering tag-on-create, filter-by-tag, rename, and delete in `frontend/e2e/prompt-tagging.spec.ts` (depends on T030, T075, T076)
+
+**Checkpoint**: Prompts can be tagged, filtered by tag, and tags can be browsed, renamed, and deleted end-to-end.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -154,6 +210,8 @@ Matches [plan.md](./plan.md)'s Project Structure: `backend/app/`, `backend/tests
 - **User Story 3 (Phase 5)**: Depends on Foundational; its CI test-running steps assume US2's test suites exist, so in practice follows US2
 - **User Story 4 (Phase 6)**: Depends on US1's pages existing to polish (in practice follows US1; can proceed in parallel with US2/US3)
 - **Polish (Phase 7)**: Depends on all desired user stories being complete
+- **User Story 5 (Phase 8)**: Depends on Foundational and US1's prompt detail/edit pages (T018, T020); independent of Phases 4–7 otherwise, so it can proceed in parallel with US2/US3/US4/Polish once US1 is done
+- **User Story 6 (Phase 9)**: Depends on Foundational and US1's prompt create/edit/list pages (T014, T017, T018, T020); independent of Phases 4–8 otherwise, so it can proceed in parallel with US2/US3/US4/US5/Polish once US1 is done
 
 ### User Story Dependencies
 
@@ -161,6 +219,8 @@ Matches [plan.md](./plan.md)'s Project Structure: `backend/app/`, `backend/tests
 - **User Story 2 (P2)**: Tests the flows US1 builds; independently valuable (a red/green suite) but exercises US1's UI, so implement after US1
 - **User Story 3 (P3)**: Gates CI on US2's suites; implement after US2
 - **User Story 4 (P4)**: Polishes US1's screens; can be implemented in parallel with US2/US3 once US1 is done
+- **User Story 5 (P5)**: Adds version history to US1's prompt detail/edit flow; can be implemented in parallel with US2/US3/US4 once US1 is done
+- **User Story 6 (P6)**: Adds tagging to US1's prompt create/edit/list flow; can be implemented in parallel with US2/US3/US4/US5 once US1 is done
 
 ### Within Each User Story
 
@@ -177,6 +237,8 @@ Matches [plan.md](./plan.md)'s Project Structure: `backend/app/`, `backend/tests
 - Within US3: T035 and T036 (the two Dockerfiles) can run in parallel
 - Within US4: T041, T042, T043 touch different concerns and can run in parallel before the consistency audit (T044)
 - Phase 7 documentation tasks (T045–T047) can all run in parallel
+- Within US5: T049 (models) can start alongside other Phase 4–7 work once Foundational is done; T056 (backend tests) and T061 (checkpoint/delete actions) are independent files and can run in parallel once their prerequisites land
+- Within US6: T064 (models) can start alongside other Phase 4–8 work once Foundational is done; T071 (backend tests), T073 (tag input component), and T077 (frontend tests) are independent files and can run in parallel once their prerequisites land
 
 ---
 
@@ -218,6 +280,8 @@ Task: "Configure Playwright in frontend/ (playwright.config.ts)"
 4. Add User Story 3 → validate by pushing a failing then a passing change → CI/CD and `docker compose up` work
 5. Add User Story 4 → validate with the desktop/mobile/error-condition walkthrough → polished daily-use experience
 6. Phase 7 → documentation and a full quickstart.md pass close out the feature
+7. Add User Story 5 → validate by editing a prompt twice, restoring an earlier version, and confirming the pre-restore state is itself recoverable → version history hardens the editing workflow
+8. Add User Story 6 → validate by tagging prompts, filtering by tag, renaming a shared tag, and confirming deletes only unlink rather than cascade → cross-cutting organization on top of collections
 
 ### Suggested MVP Scope
 
