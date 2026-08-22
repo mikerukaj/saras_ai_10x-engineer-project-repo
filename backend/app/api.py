@@ -204,6 +204,12 @@ def patch_prompt(prompt_id: str, prompt_data: PromptPatch):
 
     patch = prompt_data.model_dump(exclude_unset=True)
 
+    if "title" in patch and patch["title"] is None:
+        raise HTTPException(status_code=422, detail="title cannot be null")
+
+    if "content" in patch and patch["content"] is None:
+        raise HTTPException(status_code=422, detail="content cannot be null")
+
     if "collection_id" in patch and patch["collection_id"] is not None:
         if not storage.get_collection(patch["collection_id"]):
             raise HTTPException(status_code=400, detail="Collection not found")
