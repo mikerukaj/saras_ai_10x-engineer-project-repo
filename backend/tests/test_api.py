@@ -463,18 +463,155 @@ class TestPrompts:
         assert response.json() == {"detail": "Prompt not found"}
 
     def test_delete_prompt(self, client: TestClient, sample_prompt_data):
+        """DELETE /prompts/{id} for an existing prompt must return 204 and
+        the prompt must no longer be retrievable afterwards.
+
+        Intended behavior source: delete_prompt docstring ("Returns: None:
+        No content is returned on successful deletion."), route decorator
+        `status_code=204`, and docs/API_REFERENCE.md's DELETE
+        /prompts/{prompt_id} sample response ("204 No Content (empty
+        body)")."""
         # Create a prompt first
         create_response = client.post("/prompts", json=sample_prompt_data)
         prompt_id = create_response.json()["id"]
-        
+
         # Delete it
         response = client.delete(f"/prompts/{prompt_id}")
         assert response.status_code == 204
-        
+
         # Verify it's gone
         get_response = client.get(f"/prompts/{prompt_id}")
         assert get_response.status_code == 404
-    
+
+    def test_delete_prompt_response_body_is_empty(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """A successful 204 response must carry no body content, per REST
+        convention for 204 No Content and docs/API_REFERENCE.md's DELETE
+        /prompts/{prompt_id} sample response ("204 No Content (empty
+        body)"). The route also declares no response_model, reinforcing
+        that no JSON body is intended."""
+        created = client.post("/prompts", json=sample_prompt_data).json()
+
+        response = client.delete(f"/prompts/{created['id']}")
+        assert response.status_code == 204
+        assert response.content == b""
+
+    def test_delete_prompt_not_found_returns_404_with_documented_detail(
+        self, client: TestClient
+    ):
+        """DELETE /prompts/{id} for an id that never existed must return
+        404 with the documented detail, not 500 or any 2xx status.
+
+        Intended behavior source: delete_prompt docstring ("Raises:
+        HTTPException: With status 404 if no prompt with prompt_id
+        exists."), api-contract.md's Prompts table ("DELETE
+        /prompts/{prompt_id} ... 204 | 404"), docs/API_REFERENCE.md's
+        sample 404 response ({"detail": "Prompt not found"}), and
+        constitution.md Principle III ("404 (not 500) for missing
+        resources")."""
+        response = client.delete("/prompts/nonexistent-id")
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Prompt not found"}
+
+    def test_delete_prompt_twice_returns_404_on_second_delete(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """Deleting the same prompt a second time (double-delete) must
+        404, not succeed again or 500 - storage.delete_prompt returns
+        False once the id is no longer a key in its dict (app/storage.py
+        delete_prompt docstring: "False if no prompt with prompt_id
+        exists"), and delete_prompt in api.py raises 404 whenever
+        storage.delete_prompt returns a falsy value."""
+        created = client.post("/prompts", json=sample_prompt_data).json()
+        prompt_id = created["id"]
+
+        first_response = client.delete(f"/prompts/{prompt_id}")
+        assert first_response.status_code == 204
+
+        second_response = client.delete(f"/prompts/{prompt_id}")
+        assert second_response.status_code == 404
+        assert second_response.json() == {"detail": "Prompt not found"}
+
+    def test_delete_prompt_without_collection_id_succeeds(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """Deleting a prompt that has no collection_id (the common case,
+        collection_id defaults to None per PromptBase) must succeed with
+        204, the same as any other prompt - deleting a prompt has no
+        documented dependency on whether it is assigned to a collection.
+        Source: delete_prompt docstring/route, and storage.delete_prompt's
+        implementation, which only ever inspects self._prompts, never
+        collection_id or self._collections (app/storage.py)."""
+        created = client.post("/prompts", json=sample_prompt_data).json()
+        assert created["collection_id"] is None
+
+        response = client.delete(f"/prompts/{created['id']}")
+        assert response.status_code == 204
+
+    def test_delete_prompt_with_collection_id_succeeds_identically(
+        self, client: TestClient, sample_prompt_data, sample_collection_data
+    ):
+        """Deleting a prompt that IS assigned to a collection must behave
+        identically to deleting one that isn't - a plain 204, and no
+        assertion is made anywhere that this depends on collection_id.
+        Source: delete_prompt docstring/route (no mention of collections),
+        and storage.delete_prompt's implementation, which never reads or
+        writes self._collections (app/storage.py delete_prompt, lines
+        115-134) - unlike delete_collection, which explicitly unassigns
+        its prompts (app/storage.py delete_collection / api.py
+        delete_collection; docs/API_REFERENCE.md: "Deletes a collection.
+        Any prompts assigned to it are unassigned")."""
+        collection = client.post("/collections", json=sample_collection_data).json()
+        prompt_data = {**sample_prompt_data, "collection_id": collection["id"]}
+        created = client.post("/prompts", json=prompt_data).json()
+        assert created["collection_id"] == collection["id"]
+
+        response = client.delete(f"/prompts/{created['id']}")
+        assert response.status_code == 204
+
+        get_response = client.get(f"/prompts/{created['id']}")
+        assert get_response.status_code == 404
+
+    def test_delete_prompt_does_not_delete_its_collection(
+        self, client: TestClient, sample_prompt_data, sample_collection_data
+    ):
+        """Deleting a prompt must never delete or otherwise remove the
+        collection it belonged to - only delete_collection is documented
+        to have any cross-resource side effect, and that side effect runs
+        in the opposite direction (collection -> prompts, not
+        prompt -> collection). Source: docs/API_REFERENCE.md's DELETE
+        /prompts/{prompt_id} entry describes only "Deletes a prompt by
+        id." with no mention of collections; storage.delete_prompt only
+        ever touches self._prompts (app/storage.py, lines 115-134)."""
+        collection = client.post("/collections", json=sample_collection_data).json()
+        prompt_data = {**sample_prompt_data, "collection_id": collection["id"]}
+        created = client.post("/prompts", json=prompt_data).json()
+
+        client.delete(f"/prompts/{created['id']}")
+
+        get_collection_response = client.get(f"/collections/{collection['id']}")
+        assert get_collection_response.status_code == 200
+        assert get_collection_response.json()["id"] == collection["id"]
+
+    def test_delete_prompt_does_not_affect_other_prompts(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """Deleting one prompt must not remove or alter any other prompt
+        in storage - storage.delete_prompt only deletes the single key
+        matching the given prompt_id from self._prompts (app/storage.py,
+        lines 131-133), leaving every other entry untouched."""
+        deleted = client.post("/prompts", json=sample_prompt_data).json()
+        survivor_data = {**sample_prompt_data, "title": "Untouched Prompt"}
+        survivor = client.post("/prompts", json=survivor_data).json()
+
+        response = client.delete(f"/prompts/{deleted['id']}")
+        assert response.status_code == 204
+
+        get_survivor_response = client.get(f"/prompts/{survivor['id']}")
+        assert get_survivor_response.status_code == 200
+        assert get_survivor_response.json()["title"] == "Untouched Prompt"
+
     def test_update_prompt(self, client: TestClient, sample_prompt_data):
         """PUT /prompts/{id} happy path must return 200, echo back every
         replaced field, and refresh updated_at.
@@ -1499,30 +1636,390 @@ class TestCollections:
     """Tests for collection endpoints."""
     
     def test_create_collection(self, client: TestClient, sample_collection_data):
+        """POST /collections happy path must return 201 and the full
+        Collection shape (app/models.py Collection; response_model=
+        Collection on the route), echoing back every submitted field plus
+        a server-generated id and created_at - not just a subset. Source:
+        create_collection docstring ("Returns: The newly created
+        collection, with a generated id and creation timestamp"),
+        docs/API_REFERENCE.md's POST /collections sample response (id,
+        name, description, created_at). Unlike Prompt, Collection has no
+        updated_at field (per Collection's docstring/fields in
+        app/models.py), so it must not appear in the response."""
         response = client.post("/collections", json=sample_collection_data)
         assert response.status_code == 201
         data = response.json()
+
+        assert set(data.keys()) == {"id", "name", "description", "created_at"}
         assert data["name"] == sample_collection_data["name"]
-        assert "id" in data
-    
+        assert data["description"] == sample_collection_data["description"]
+        assert isinstance(data["id"], str)
+        assert len(data["id"]) > 0
+        assert "created_at" in data
+
+    def test_create_collection_persists_and_is_retrievable(
+        self, client: TestClient, sample_collection_data
+    ):
+        """The created collection must actually be stored, not merely
+        echoed back - storage.create_collection docstring ("Store a new
+        collection") and the create_collection route calling
+        storage.create_collection(collection) before returning it."""
+        created = client.post("/collections", json=sample_collection_data).json()
+
+        response = client.get(f"/collections/{created['id']}")
+        assert response.status_code == 200
+        assert response.json() == created
+
+    def test_create_collection_without_description_defaults_to_none(
+        self, client: TestClient
+    ):
+        """description is optional (CollectionBase.description docstring:
+        "An optional description") - omitting it entirely must succeed
+        and yield None, not a validation error or an empty string."""
+        response = client.post("/collections", json={"name": "No description"})
+        assert response.status_code == 201
+        assert response.json()["description"] is None
+
+    def test_create_collection_with_description_is_preserved(
+        self, client: TestClient
+    ):
+        """When description is provided, it must be stored and returned
+        verbatim, not dropped or truncated below its max_length=500."""
+        response = client.post(
+            "/collections",
+            json={"name": "Has description", "description": "A helpful description"},
+        )
+        assert response.status_code == 201
+        assert response.json()["description"] == "A helpful description"
+
+    def test_create_collection_generates_unique_ids_across_multiple_creates(
+        self, client: TestClient
+    ):
+        """Each call must generate a fresh unique id (models.generate_id
+        docstring: "Generate a unique identifier string" via uuid4) -
+        creating two otherwise-identical collections must not collide or
+        reuse an id."""
+        first = client.post("/collections", json={"name": "Same name"}).json()
+        second = client.post("/collections", json={"name": "Same name"}).json()
+
+        assert first["id"] != second["id"]
+
+    def test_create_collection_missing_name_returns_422(self, client: TestClient):
+        """name is a required field (CollectionBase.name: Field(...,
+        min_length=1, max_length=100) - the `...` marks it required in
+        Pydantic). Omitting it must fail FastAPI's request validation with
+        422, per api-contract.md's error shape section ("422 (request body
+        fails Pydantic validation")."""
+        response = client.post("/collections", json={"description": "No name"})
+        assert response.status_code == 422
+
+    def test_create_collection_empty_name_returns_422(self, client: TestClient):
+        """name has min_length=1 (CollectionBase.name Field constraint) -
+        an empty string must be rejected with 422, not silently accepted
+        as a name-less collection."""
+        response = client.post("/collections", json={"name": ""})
+        assert response.status_code == 422
+
+    def test_create_collection_name_exceeding_max_length_returns_422(
+        self, client: TestClient
+    ):
+        """name has max_length=100 (CollectionBase.name Field constraint)
+        - a 101-character name must be rejected with 422."""
+        response = client.post("/collections", json={"name": "x" * 101})
+        assert response.status_code == 422
+
+    def test_create_collection_name_at_max_length_boundary_succeeds(
+        self, client: TestClient
+    ):
+        """A name of exactly 100 characters is within the documented
+        boundary (max_length=100 is inclusive in Pydantic) and must be
+        accepted."""
+        name = "x" * 100
+        response = client.post("/collections", json={"name": name})
+        assert response.status_code == 201
+        assert response.json()["name"] == name
+
+    def test_create_collection_description_exceeding_max_length_returns_422(
+        self, client: TestClient
+    ):
+        """description has max_length=500 (CollectionBase.description
+        Field constraint) - a 501-character description must be rejected
+        with 422."""
+        response = client.post(
+            "/collections", json={"name": "Some name", "description": "x" * 501}
+        )
+        assert response.status_code == 422
+
+    def test_create_collection_description_at_max_length_boundary_succeeds(
+        self, client: TestClient
+    ):
+        """A description of exactly 500 characters is within the
+        documented boundary (max_length=500 is inclusive in Pydantic) and
+        must be accepted."""
+        description = "x" * 500
+        response = client.post(
+            "/collections", json={"name": "Some name", "description": description}
+        )
+        assert response.status_code == 201
+        assert response.json()["description"] == description
+
+    def test_create_collection_null_description_is_accepted(
+        self, client: TestClient
+    ):
+        """An explicit null description must be treated the same as an
+        omitted one (Optional[str] = Field(None, ...)) - must succeed and
+        yield None, not a 422."""
+        response = client.post(
+            "/collections", json={"name": "Explicit null", "description": None}
+        )
+        assert response.status_code == 201
+        assert response.json()["description"] is None
+
+    def test_create_collection_wrong_type_for_name_returns_422(
+        self, client: TestClient
+    ):
+        """name is typed as str (CollectionBase.name: str) - submitting a
+        non-string (e.g. an integer) must fail FastAPI/Pydantic's request
+        validation with 422."""
+        response = client.post("/collections", json={"name": 12345})
+        assert response.status_code == 422
+
+    def test_create_collection_missing_body_returns_422(self, client: TestClient):
+        """POST /collections requires a JSON body containing at least
+        name; sending no body at all must fail validation with 422 rather
+        than crashing or defaulting to an empty collection."""
+        response = client.post("/collections")
+        assert response.status_code == 422
+
     def test_list_collections(self, client: TestClient, sample_collection_data):
-        client.post("/collections", json=sample_collection_data)
-        
+        """A single created collection must be returned with a matching
+        total count and its full field set, per the CollectionList/
+        list_collections docstrings (app/models.py, app/api.py) and the
+        documented GET /collections response shape
+        (docs/API_REFERENCE.md)."""
+        created = client.post("/collections", json=sample_collection_data).json()
+
         response = client.get("/collections")
         assert response.status_code == 200
         data = response.json()
         assert len(data["collections"]) == 1
-    
+        assert data["total"] == 1
+        returned = data["collections"][0]
+        assert returned["id"] == created["id"]
+        assert returned["name"] == sample_collection_data["name"]
+        assert returned["description"] == sample_collection_data["description"]
+        assert "created_at" in returned
+
+    # ---- Additional list_collections coverage: empty case, multiple
+    # ---- collections, and the total/collections-length invariant.
+    # ---- Intended behavior source: list_collections docstring and
+    # ---- CollectionList docstring (app/api.py, app/models.py),
+    # ---- docs/API_REFERENCE.md's "GET /collections" section, and
+    # ---- Storage.get_all_collections's docstring (app/storage.py),
+    # ---- which explicitly states collections are returned "in no
+    # ---- particular order" - no written spec guarantees an order for
+    # ---- this endpoint (unlike list_prompts, which is documented to
+    # ---- sort newest-first), so these tests deliberately assert on
+    # ---- set membership/count rather than a specific order.
+
+    def test_list_collections_empty_returns_empty_list_and_zero_total(
+        self, client: TestClient
+    ):
+        """With no collections created, GET /collections must return an
+        empty list and total=0, not an error - mirrors the documented
+        empty-list behavior of PromptList/list_prompts and the
+        CollectionList docstring's own empty example
+        (`CollectionList(collections=[], total=0)`)."""
+        response = client.get("/collections")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["collections"] == []
+        assert data["total"] == 0
+
+    def test_list_collections_returns_all_created_collections(
+        self, client: TestClient
+    ):
+        """With no filtering parameters supported by this endpoint, every
+        stored collection must be returned - list_collections is
+        documented as unconditionally "All stored collections and the
+        total count." Order is not asserted since no spec guarantees one
+        (see note above); membership is checked via a set of names."""
+        client.post("/collections", json={"name": "Alpha"})
+        client.post("/collections", json={"name": "Beta"})
+        client.post("/collections", json={"name": "Gamma"})
+
+        response = client.get("/collections")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["collections"]) == 3
+        assert {c["name"] for c in data["collections"]} == {"Alpha", "Beta", "Gamma"}
+
+    def test_list_collections_total_always_matches_returned_collections_length(
+        self, client: TestClient
+    ):
+        """total must equal len(collections) per the CollectionList
+        docstring and list_collections's implementation contract
+        (`CollectionList(collections=collections, total=len(collections))`),
+        regardless of how many collections exist."""
+        client.post("/collections", json={"name": "One"})
+        client.post("/collections", json={"name": "Two"})
+        client.post("/collections", json={"name": "Three"})
+        client.post("/collections", json={"name": "Four"})
+
+        response = client.get("/collections")
+        data = response.json()
+        assert data["total"] == len(data["collections"])
+        assert data["total"] == 4
+
+    def test_list_collections_each_item_has_full_collection_field_set(
+        self, client: TestClient
+    ):
+        """Each item in the collections list must expose the full
+        Collection schema - id, name, description, and created_at - per
+        the Collection model's documented Attributes (app/models.py),
+        not just a subset of fields."""
+        client.post(
+            "/collections",
+            json={"name": "Docs", "description": "Documentation prompts"},
+        )
+        client.post("/collections", json={"name": "No Description"})
+
+        response = client.get("/collections")
+        data = response.json()
+        by_name = {c["name"]: c for c in data["collections"]}
+
+        docs = by_name["Docs"]
+        assert set(["id", "name", "description", "created_at"]).issubset(docs.keys())
+        assert docs["description"] == "Documentation prompts"
+
+        no_desc = by_name["No Description"]
+        assert no_desc["description"] is None
+
+    def test_list_collections_reflects_deletions(self, client: TestClient):
+        """After a collection is deleted, GET /collections must no longer
+        include it and total must decrease accordingly - list_collections
+        always reflects current storage state (storage.get_all_collections
+        docstring: "Every collection currently in storage")."""
+        keep = client.post("/collections", json={"name": "Keep"}).json()
+        remove = client.post("/collections", json={"name": "Remove"}).json()
+
+        delete_response = client.delete(f"/collections/{remove['id']}")
+        assert delete_response.status_code == 204
+
+        response = client.get("/collections")
+        data = response.json()
+        assert data["total"] == 1
+        assert [c["id"] for c in data["collections"]] == [keep["id"]]
+
     def test_get_collection_not_found(self, client: TestClient):
+        """GET /collections/{id} for a nonexistent id must 404 with the
+        documented detail body, per get_collection's docstring ("Raises:
+        HTTPException: With status 404 if no collection with collection_id
+        exists.") and the documented 404 sample response in
+        docs/API_REFERENCE.md ('GET /collections/{collection_id}'):
+        `{"detail": "Collection not found"}`. This also exercises the
+        constitution's "404 (not 500) for missing resources" rule
+        (.specify/memory/constitution.md)."""
         response = client.get("/collections/nonexistent-id")
         assert response.status_code == 404
-    
-    def test_delete_collection_with_prompts(self, client: TestClient, sample_collection_data, sample_prompt_data):
-        """Test that deleting a collection unlinks its prompts rather than deleting them.
+        assert response.json() == {"detail": "Collection not found"}
 
-        Creates a collection and a prompt assigned to that collection, deletes the
-        collection, then verifies the prompt still exists in the list with
-        collection_id set to None
+    def test_get_collection_success_returns_full_field_set(
+        self, client: TestClient, sample_collection_data
+    ):
+        """A successful GET /collections/{id} must return 200 with the
+        full Collection schema (id, name, description, created_at) and
+        the values must match what was created, per the Collection
+        model's documented Attributes (app/models.py), get_collection's
+        docstring ("Returns: Collection: The matching collection."), and
+        the documented 200 sample response in docs/API_REFERENCE.md
+        ('GET /collections/{collection_id}')."""
+        created = client.post("/collections", json=sample_collection_data).json()
+
+        response = client.get(f"/collections/{created['id']}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert set(["id", "name", "description", "created_at"]).issubset(
+            data.keys()
+        )
+        assert data["id"] == created["id"]
+        assert data["name"] == sample_collection_data["name"]
+        assert data["description"] == sample_collection_data["description"]
+        assert data["created_at"] == created["created_at"]
+
+    def test_get_collection_with_description_set(self, client: TestClient):
+        """When a collection is created with a description, GET
+        /collections/{id} must return that same description value - per
+        the Collection/CollectionBase docstring's documented
+        `description` attribute (app/models.py) and the documented 200
+        response shape in docs/API_REFERENCE.md, which always includes a
+        (possibly null) `description` field."""
+        created = client.post(
+            "/collections",
+            json={"name": "With Description", "description": "Has a description"},
+        ).json()
+
+        response = client.get(f"/collections/{created['id']}")
+
+        assert response.status_code == 200
+        assert response.json()["description"] == "Has a description"
+
+    def test_get_collection_with_description_omitted_returns_none(
+        self, client: TestClient
+    ):
+        """When a collection is created without a description, `description`
+        is documented as `Optional[str]` (CollectionBase, app/models.py),
+        so GET /collections/{id} must return `description: null` rather
+        than omitting the field or erroring."""
+        created = client.post("/collections", json={"name": "No Description"}).json()
+
+        response = client.get(f"/collections/{created['id']}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "description" in data
+        assert data["description"] is None
+
+    def test_get_collection_after_deletion_returns_404(
+        self, client: TestClient, sample_collection_data
+    ):
+        """After a collection has been deleted, GET /collections/{id} must
+        404 (matching storage.get_collection's documented Optional[Collection]
+        return - None once removed from storage - and get_collection's
+        documented 404-on-missing behavior), not continue to succeed and
+        not 500, per the constitution's "404 (not 500) for missing
+        resources" rule (.specify/memory/constitution.md)."""
+        created = client.post("/collections", json=sample_collection_data).json()
+        collection_id = created["id"]
+
+        delete_response = client.delete(f"/collections/{collection_id}")
+        assert delete_response.status_code == 204
+
+        response = client.get(f"/collections/{collection_id}")
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Collection not found"}
+
+    def test_delete_collection_with_prompts(self, client: TestClient, sample_collection_data, sample_prompt_data):
+        """Deleting a collection must unlink (not delete) its prompts.
+
+        Intended behavior source: delete_collection's docstring ("Any
+        prompts assigned to this collection are unassigned (their
+        collection_id is set to None) rather than deleted, before the
+        collection itself is removed"), docs/API_REFERENCE.md's
+        `DELETE /collections/{collection_id}` section ("Any prompts
+        assigned to it are **unassigned** ... rather than deleted"),
+        specs/001-complete-promptlab-app/contracts/api-contract.md's
+        DELETE /collections row ("backend already unassigns affected
+        prompts before deleting, satisfying FR-008"), and
+        .specify/memory/constitution.md Principle III ("Deleting a parent
+        resource ... MUST NOT silently orphan its children").
+
+        This assertion is unconditional (not `if prompts: ...`): the
+        prompt MUST still exist afterward with collection_id None. A
+        prompt that vanished entirely, or one that kept a dangling
+        reference to the deleted collection, is a bug, not an
+        acceptable alternative.
 
         Args:
             client: FastAPI test client backed by isolated in-memory storage.
@@ -1540,20 +2037,180 @@ class TestCollections:
         # Create collection
         col_response = client.post("/collections", json=sample_collection_data)
         collection_id = col_response.json()["id"]
-        
+
         # Create prompt in collection
         prompt_data = {**sample_prompt_data, "collection_id": collection_id}
         prompt_response = client.post("/prompts", json=prompt_data)
         prompt_id = prompt_response.json()["id"]
-        
+
         # Delete collection
-        client.delete(f"/collections/{collection_id}")
-        
-        # The prompt still exists but has invalid collection_id
+        delete_response = client.delete(f"/collections/{collection_id}")
+        assert delete_response.status_code == 204
+
+        # The prompt must still exist, unlinked (not deleted, not left
+        # pointing at the now-gone collection).
         prompts = client.get("/prompts").json()["prompts"]
-        if prompts:
-            # Prompt exists with orphaned collection_id
-            assert len(prompts) == 1
-            assert prompts[0]["id"] == prompt_id
-            assert prompts[0]["collection_id"] == None
-            # After fix, collection_id should be None or prompt should be deleted
+        assert len(prompts) == 1
+        assert prompts[0]["id"] == prompt_id
+        assert prompts[0]["collection_id"] is None
+
+    def test_delete_collection_not_found_returns_404(self, client: TestClient):
+        """DELETE /collections/{id} for a nonexistent id must 404 with the
+        documented detail body, per delete_collection's docstring ("Raises:
+        HTTPException: With status 404 if no collection with collection_id
+        exists.") and constitution.md Principle III ("404 (not 500) for
+        missing resources")."""
+        response = client.delete("/collections/nonexistent-id")
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Collection not found"}
+
+    def test_delete_collection_without_prompts_succeeds(
+        self, client: TestClient, sample_collection_data
+    ):
+        """Deleting a collection with no prompts assigned must succeed
+        with 204 and remove the collection - the common/simple case that
+        never enters the unlink loop (storage.get_prompts_by_collection
+        returns [] per its docstring: "Retrieve all prompts belonging to
+        a given collection" -> empty when none match)."""
+        created = client.post("/collections", json=sample_collection_data).json()
+        collection_id = created["id"]
+
+        response = client.delete(f"/collections/{collection_id}")
+        assert response.status_code == 204
+        assert response.content == b""
+
+        get_response = client.get(f"/collections/{collection_id}")
+        assert get_response.status_code == 404
+
+    def test_delete_collection_removes_the_collection_itself(
+        self, client: TestClient, sample_collection_data
+    ):
+        """After deletion, the collection itself must be gone from
+        storage - a subsequent GET must 404, per storage.delete_collection's
+        docstring ("Delete a collection by its id") and get_collection's
+        documented 404-on-missing behavior. Also covered via
+        docs/API_REFERENCE.md's DELETE /collections/{collection_id}
+        section."""
+        created = client.post("/collections", json=sample_collection_data).json()
+        collection_id = created["id"]
+
+        client.delete(f"/collections/{collection_id}")
+
+        response = client.get(f"/collections/{collection_id}")
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Collection not found"}
+
+    def test_delete_collection_unlinks_all_assigned_prompts_not_just_one(
+        self, client: TestClient, sample_collection_data
+    ):
+        """When multiple prompts are assigned to the deleted collection,
+        every one of them must be unlinked, not just the first -
+        delete_collection's docstring says "Any prompts assigned to this
+        collection are unassigned" (plural, unconditional), and it
+        iterates `storage.get_prompts_by_collection(collection_id)` with
+        no early exit."""
+        collection_id = client.post(
+            "/collections", json=sample_collection_data
+        ).json()["id"]
+
+        prompt_ids = []
+        for i in range(3):
+            resp = client.post(
+                "/prompts",
+                json={
+                    "title": f"Prompt {i}",
+                    "content": f"Content {i}",
+                    "collection_id": collection_id,
+                },
+            )
+            prompt_ids.append(resp.json()["id"])
+
+        delete_response = client.delete(f"/collections/{collection_id}")
+        assert delete_response.status_code == 204
+
+        prompts = client.get("/prompts").json()["prompts"]
+        assert len(prompts) == 3
+        assert {p["id"] for p in prompts} == set(prompt_ids)
+        for prompt in prompts:
+            assert prompt["collection_id"] is None
+
+    def test_delete_collection_does_not_affect_prompts_in_other_collections(
+        self, client: TestClient
+    ):
+        """Deleting one collection must leave prompts assigned to a
+        *different* collection untouched - delete_collection only calls
+        `storage.get_prompts_by_collection(collection_id)` for the
+        collection being deleted (app/api.py), so prompts belonging to
+        other collections must keep both their collection_id and their
+        original updated_at."""
+        target_collection = client.post(
+            "/collections", json={"name": "Target"}
+        ).json()
+        other_collection = client.post(
+            "/collections", json={"name": "Other"}
+        ).json()
+
+        target_prompt = client.post(
+            "/prompts",
+            json={
+                "title": "In target",
+                "content": "content",
+                "collection_id": target_collection["id"],
+            },
+        ).json()
+        other_prompt = client.post(
+            "/prompts",
+            json={
+                "title": "In other",
+                "content": "content",
+                "collection_id": other_collection["id"],
+            },
+        ).json()
+
+        client.delete(f"/collections/{target_collection['id']}")
+
+        prompts = {p["id"]: p for p in client.get("/prompts").json()["prompts"]}
+        assert prompts[target_prompt["id"]]["collection_id"] is None
+        assert prompts[other_prompt["id"]]["collection_id"] == other_collection["id"]
+        assert prompts[other_prompt["id"]]["updated_at"] == other_prompt["updated_at"]
+
+    def test_delete_collection_unlink_refreshes_updated_at_and_preserves_other_fields(
+        self, client: TestClient, sample_collection_data
+    ):
+        """The unlink code path (app/api.py delete_collection) explicitly
+        rebuilds each affected Prompt with `updated_at=get_current_time()`
+        while copying id, title, content, description, and created_at
+        verbatim from the original. Per constitution.md Principle III
+        ("Mutating a resource MUST refresh its updated_at timestamp"),
+        unlinking counts as a mutation of the prompt and must bump
+        updated_at; everything else must be preserved unchanged."""
+        collection_id = client.post(
+            "/collections", json=sample_collection_data
+        ).json()["id"]
+
+        created = client.post(
+            "/prompts",
+            json={
+                "title": "Original Title",
+                "content": "Original content",
+                "description": "Original description",
+                "collection_id": collection_id,
+            },
+        ).json()
+
+        import time
+        time.sleep(0.1)  # Small delay to ensure timestamp would change
+
+        client.delete(f"/collections/{collection_id}")
+
+        prompts = client.get("/prompts").json()["prompts"]
+        assert len(prompts) == 1
+        unlinked = prompts[0]
+
+        assert unlinked["id"] == created["id"]
+        assert unlinked["title"] == created["title"]
+        assert unlinked["content"] == created["content"]
+        assert unlinked["description"] == created["description"]
+        assert unlinked["created_at"] == created["created_at"]
+        assert unlinked["collection_id"] is None
+        assert unlinked["updated_at"] != created["updated_at"]
