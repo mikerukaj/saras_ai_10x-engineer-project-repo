@@ -5,7 +5,8 @@ In a production environment, this would be replaced with a database.
 """
 
 from typing import Dict, List, Optional
-from app.models import Prompt, Collection, PromptVersion
+
+from app.models import Collection, Prompt, PromptVersion
 
 
 class Storage:

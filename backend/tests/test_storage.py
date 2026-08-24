@@ -25,10 +25,10 @@ TestDeleteCollection, TestGetPromptsByCollection, and TestClear
 respectively). Every method on Storage now has a dedicated test class.
 """
 
-import pytest
 
-from app.models import Prompt, Collection
-from app.storage import Storage, storage as storage_singleton
+from app.models import Collection, Prompt
+from app.storage import Storage
+from app.storage import storage as storage_singleton
 
 
 class TestPromptCRUD:

@@ -1,20 +1,28 @@
 """FastAPI routes for PromptLab"""
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from app import __version__
 from app.models import (
-    Prompt, PromptCreate, PromptUpdate, PromptPatch,
-    Collection, CollectionCreate,
-    PromptVersion, PromptVersionCreate, PromptVersionList,
-    PromptList, CollectionList, HealthResponse,
-    get_current_time
+    Collection,
+    CollectionCreate,
+    CollectionList,
+    HealthResponse,
+    Prompt,
+    PromptCreate,
+    PromptList,
+    PromptPatch,
+    PromptUpdate,
+    PromptVersion,
+    PromptVersionCreate,
+    PromptVersionList,
+    get_current_time,
 )
 from app.storage import storage
-from app.utils import sort_prompts_by_date, filter_prompts_by_collection, search_prompts
-from app import __version__
-
+from app.utils import filter_prompts_by_collection, search_prompts, sort_prompts_by_date
 
 app = FastAPI(
     title="PromptLab API",

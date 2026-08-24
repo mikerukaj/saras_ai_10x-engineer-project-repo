@@ -42,9 +42,7 @@ feature is unbuilt.
 
 import time
 
-import pytest
 from fastapi.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # User Story 1 - Every edit is automatically recoverable (Priority: P1)
