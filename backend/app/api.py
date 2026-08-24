@@ -7,6 +7,7 @@ from typing import Optional
 from app.models import (
     Prompt, PromptCreate, PromptUpdate, PromptPatch,
     Collection, CollectionCreate,
+    PromptVersion, PromptVersionCreate, PromptVersionList,
     PromptList, CollectionList, HealthResponse,
     get_current_time
 )
@@ -130,9 +131,11 @@ def create_prompt(prompt_data: PromptCreate):
         collection = storage.get_collection(prompt_data.collection_id)
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
-    
+
     prompt = Prompt(**prompt_data.model_dump())
-    return storage.create_prompt(prompt)
+    created = storage.create_prompt(prompt)
+    storage.create_version(created.id, created.title, created.content, created.description)
+    return created
 
 
 @app.put("/prompts/{prompt_id}", response_model=Prompt)
@@ -158,13 +161,24 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
     existing = storage.get_prompt(prompt_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Prompt not found")
-    
+
     # Validate collection if provided
     if prompt_data.collection_id:
         collection = storage.get_collection(prompt_data.collection_id)
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
-    
+
+    # Capture the pre-edit state as a new version, but only if the
+    # prompt's wording is actually changing (a collection_id-only edit
+    # must not spam version history).
+    content_changed = (
+        prompt_data.title != existing.title
+        or prompt_data.content != existing.content
+        or prompt_data.description != existing.description
+    )
+    if content_changed:
+        storage.create_version(existing.id, existing.title, existing.content, existing.description)
+
     updated_prompt = Prompt(
         id=existing.id,
         title=prompt_data.title,
@@ -174,7 +188,7 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         created_at=existing.created_at,
         updated_at=get_current_time()
     )
-    
+
     return storage.update_prompt(prompt_id, updated_prompt)
 
 
@@ -214,11 +228,26 @@ def patch_prompt(prompt_id: str, prompt_data: PromptPatch):
         if not storage.get_collection(patch["collection_id"]):
             raise HTTPException(status_code=400, detail="Collection not found")
 
+    new_title = patch.get("title", existing.title)
+    new_content = patch.get("content", existing.content)
+    new_description = patch.get("description", existing.description)
+
+    # Capture the pre-patch state as a new version, but only if the
+    # prompt's wording is actually changing (a collection_id-only patch
+    # must not spam version history).
+    content_changed = (
+        new_title != existing.title
+        or new_content != existing.content
+        or new_description != existing.description
+    )
+    if content_changed:
+        storage.create_version(existing.id, existing.title, existing.content, existing.description)
+
     updated_prompt = Prompt(
         id=existing.id,
-        title=patch.get("title", existing.title),
-        content=patch.get("content", existing.content),
-        description=patch.get("description", existing.description),
+        title=new_title,
+        content=new_content,
+        description=new_description,
         collection_id=patch.get("collection_id", existing.collection_id),
         created_at=existing.created_at,
         updated_at=get_current_time()
@@ -244,6 +273,180 @@ def delete_prompt(prompt_id: str):
     """
     if not storage.delete_prompt(prompt_id):
         raise HTTPException(status_code=404, detail="Prompt not found")
+    storage.delete_versions_by_prompt(prompt_id)
+    return None
+
+
+# ============== Prompt Version Endpoints ==============
+
+@app.get("/prompts/{prompt_id}/versions", response_model=PromptVersionList)
+def list_prompt_versions(prompt_id: str):
+    """List a prompt's version history, newest first.
+
+    Args:
+        prompt_id (str): The unique identifier of the prompt whose
+            version history should be listed.
+
+    Returns:
+        PromptVersionList: The prompt's versions, ordered by
+            version_number descending, and the total count.
+
+    Raises:
+        HTTPException: With status 404 if no prompt with prompt_id exists.
+
+    Example:
+        >>> list_prompt_versions("abc-123")
+        PromptVersionList(versions=[...], total=3)
+    """
+    if not storage.get_prompt(prompt_id):
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    versions = storage.get_versions_by_prompt(prompt_id)
+    versions.sort(key=lambda v: v.version_number, reverse=True)
+    return PromptVersionList(versions=versions, total=len(versions))
+
+
+@app.get("/prompts/{prompt_id}/versions/{version_id}", response_model=PromptVersion)
+def get_prompt_version(prompt_id: str, version_id: str):
+    """Retrieve one specific version of a prompt.
+
+    Args:
+        prompt_id (str): The unique identifier of the prompt the version
+            belongs to.
+        version_id (str): The unique identifier of the version to
+            retrieve.
+
+    Returns:
+        PromptVersion: The matching version.
+
+    Raises:
+        HTTPException: With status 404 if prompt_id does not exist, if
+            version_id does not exist, or if version_id exists but does
+            not belong to prompt_id.
+
+    Example:
+        >>> get_prompt_version("abc-123", "3b1c...")
+        PromptVersion(id='3b1c...', prompt_id='abc-123', ...)
+    """
+    if not storage.get_prompt(prompt_id):
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    version = storage.get_version(version_id)
+    if not version or version.prompt_id != prompt_id:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return version
+
+
+@app.post("/prompts/{prompt_id}/versions", response_model=PromptVersion, status_code=201)
+def create_prompt_version(prompt_id: str, version_data: PromptVersionCreate):
+    """Manually save a labeled checkpoint of a prompt's current state.
+
+    Args:
+        prompt_id (str): The unique identifier of the prompt to
+            checkpoint.
+        version_data (PromptVersionCreate): The optional label for the
+            new checkpoint.
+
+    Returns:
+        PromptVersion: The newly created version, capturing the prompt's
+            current title, content, and description, with version_number
+            set to one more than the highest existing version for this
+            prompt.
+
+    Raises:
+        HTTPException: With status 404 if no prompt with prompt_id exists.
+
+    Example:
+        >>> create_prompt_version("abc-123", PromptVersionCreate(label="before rewrite"))
+        PromptVersion(prompt_id='abc-123', label='before rewrite', ...)
+    """
+    prompt = storage.get_prompt(prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    return storage.create_version(
+        prompt_id, prompt.title, prompt.content, prompt.description,
+        label=version_data.label
+    )
+
+
+@app.post("/prompts/{prompt_id}/versions/{version_id}/restore", response_model=Prompt)
+def restore_prompt_version(prompt_id: str, version_id: str):
+    """Restore a prompt's title, content, and description to a past version.
+
+    The prompt's state immediately before the restore is itself saved as
+    a new, unlabeled version, so the restore can be undone the same way
+    any other edit can. The prompt's collection_id is left unchanged.
+
+    Args:
+        prompt_id (str): The unique identifier of the prompt to restore.
+        version_id (str): The unique identifier of the version to
+            restore to.
+
+    Returns:
+        Prompt: The updated prompt, with updated_at refreshed.
+
+    Raises:
+        HTTPException: With status 404 if prompt_id does not exist, if
+            version_id does not exist, or if version_id exists but does
+            not belong to prompt_id.
+
+    Example:
+        >>> restore_prompt_version("abc-123", "3b1c...")
+        Prompt(id='abc-123', title='Customer follow-up email', ...)
+    """
+    existing = storage.get_prompt(prompt_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    version = storage.get_version(version_id)
+    if not version or version.prompt_id != prompt_id:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    # Snapshot the current (pre-restore) state before applying the
+    # restore, so the restore itself is undoable like any other edit.
+    storage.create_version(existing.id, existing.title, existing.content, existing.description)
+
+    restored_prompt = Prompt(
+        id=existing.id,
+        title=version.title,
+        content=version.content,
+        description=version.description,
+        collection_id=existing.collection_id,
+        created_at=existing.created_at,
+        updated_at=get_current_time()
+    )
+    return storage.update_prompt(prompt_id, restored_prompt)
+
+
+@app.delete("/prompts/{prompt_id}/versions/{version_id}", status_code=204)
+def delete_prompt_version(prompt_id: str, version_id: str):
+    """Delete one specific version of a prompt.
+
+    Args:
+        prompt_id (str): The unique identifier of the prompt the version
+            belongs to.
+        version_id (str): The unique identifier of the version to delete.
+
+    Returns:
+        None: No content is returned on successful deletion.
+
+    Raises:
+        HTTPException: With status 404 if prompt_id does not exist, if
+            version_id does not exist, or if version_id exists but does
+            not belong to prompt_id.
+
+    Example:
+        >>> delete_prompt_version("abc-123", "3b1c...")
+    """
+    if not storage.get_prompt(prompt_id):
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    version = storage.get_version(version_id)
+    if not version or version.prompt_id != prompt_id:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    storage.delete_version(version_id)
     return None
 
 

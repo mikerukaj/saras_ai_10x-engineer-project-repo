@@ -134,6 +134,78 @@ class Prompt(PromptBase):
         from_attributes = True
 
 
+# ============== Prompt Version Models ==============
+
+class PromptVersion(BaseModel):
+    """A historical snapshot of a prompt's wording.
+
+    Attributes:
+        id (str): The version's unique identifier, generated automatically.
+        prompt_id (str): The identifier of the prompt this version
+            belongs to.
+        version_number (int): The version's sequential position among the
+            prompt's versions, starting at 1 and never reused.
+        title (str): The prompt's title at the time this version was
+            captured.
+        content (str): The prompt's content at the time this version was
+            captured.
+        description (Optional[str]): The prompt's description at the
+            time this version was captured.
+        label (Optional[str]): An optional user-supplied note; only set
+            on manually-checkpointed versions.
+        created_at (datetime): The UTC timestamp when this version was
+            captured, set automatically.
+
+    Example:
+        >>> version = PromptVersion(prompt_id="abc-123", version_number=1,
+        ...     title="Greeting", content="Hello, world!")
+        >>> version.version_number
+        1
+    """
+
+    id: str = Field(default_factory=generate_id)
+    prompt_id: str
+    version_number: int
+    title: str
+    content: str
+    description: Optional[str] = None
+    label: Optional[str] = None
+    created_at: datetime = Field(default_factory=get_current_time)
+
+
+class PromptVersionCreate(BaseModel):
+    """Schema for manually saving a labeled checkpoint of a prompt.
+
+    Attributes:
+        label (Optional[str]): An optional note describing this
+            checkpoint, up to 100 characters.
+
+    Example:
+        >>> checkpoint = PromptVersionCreate(label="before shortening")
+        >>> checkpoint.label
+        'before shortening'
+    """
+
+    label: Optional[str] = Field(None, max_length=100)
+
+
+class PromptVersionList(BaseModel):
+    """Response schema for a prompt's version history.
+
+    Attributes:
+        versions (List[PromptVersion]): The prompt's versions.
+        total (int): The total number of versions.
+
+    Example:
+        >>> result = PromptVersionList(versions=[], total=0)
+        >>> result.total
+        0
+    """
+
+    versions: List[PromptVersion]
+    total: int
+
+
 # ============== Collection Models ==============
 
 class CollectionBase(BaseModel):
