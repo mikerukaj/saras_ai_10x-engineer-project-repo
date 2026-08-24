@@ -52,7 +52,7 @@ import uuid
 
 import pytest
 
-from app.models import generate_id, Prompt
+from app.models import Prompt, generate_id
 
 
 class TestGenerateId:

@@ -6,7 +6,6 @@ Students should expand these tests significantly in Week 3.
 
 from datetime import datetime, timedelta
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app import __version__

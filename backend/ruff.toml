@@ -1,0 +1,28 @@
+# Ruff configuration for the PromptLab backend.
+#
+# This repo had no linter configured before (see README.md "Linting /
+# formatting"). Ruff's own unconfigured defaults on this version pull in a
+# very broad set of rule categories (datetime-tzinfo checks, pyupgrade
+# typing-modernization rules, several pylint/refactor rules, etc.) that
+# would require a large, unrelated refactor of application code just to
+# bootstrap CI. Instead we pin an explicit, conventional baseline so the
+# linted rule set is predictable and doesn't shift under us on a ruff
+# upgrade:
+#
+#   E - pycodestyle errors
+#   F - Pyflakes (unused imports/vars, undefined names, etc.)
+#   I - isort (import sorting)
+#
+# This is the same practical baseline flake8 + isort covered before ruff
+# existed, and is what most projects mean by "just lint with ruff".
+
+line-length = 120
+
+[lint]
+select = ["E", "F", "I"]
+
+[lint.per-file-ignores]
+# Test names are intentionally long and descriptive (e.g.
+# test_get_prompts_by_collection_with_empty_string_id_matches_a_prompt_whose_collection_id_is_genuinely_empty_string);
+# don't force them under the line-length limit.
+"tests/*.py" = ["E501"]

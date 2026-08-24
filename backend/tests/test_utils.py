@@ -120,11 +120,11 @@ import pytest
 
 from app.models import Prompt
 from app.utils import (
-    sort_prompts_by_date,
+    extract_variables,
     filter_prompts_by_collection,
     search_prompts,
+    sort_prompts_by_date,
     validate_prompt_content,
-    extract_variables,
 )
 
 
