@@ -259,11 +259,10 @@ class Storage:
             >>> storage.create_version("prompt-1", "Greeting", "Hi")
             PromptVersion(prompt_id='prompt-1', version_number=1, ...)
         """
-        existing_numbers = [
-            v.version_number for v in self._versions.values()
-            if v.prompt_id == prompt_id
-        ]
-        next_number = max(existing_numbers, default=0) + 1
+        next_number = max(
+            (v.version_number for v in self.get_versions_by_prompt(prompt_id)),
+            default=0,
+        ) + 1
         version = PromptVersion(
             prompt_id=prompt_id,
             version_number=next_number,
@@ -345,10 +344,8 @@ class Storage:
             >>> storage = Storage()
             >>> storage.delete_versions_by_prompt("missing-id")
         """
-        for version_id in [
-            v.id for v in self._versions.values() if v.prompt_id == prompt_id
-        ]:
-            del self._versions[version_id]
+        for version in self.get_versions_by_prompt(prompt_id):
+            self.delete_version(version.id)
 
     # ============== Utility ==============
 
