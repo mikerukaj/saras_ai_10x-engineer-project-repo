@@ -388,7 +388,17 @@ class TestRestoreVersion:
         """Spec User Story 3, Acceptance Scenario 3: "Given a prompt
         currently assigned to a collection, When the user restores an
         earlier version, Then the prompt remains assigned to its current
-        collection." Also API contract: "collection_id unchanged."""
+        collection." Also API contract: "collection_id unchanged."
+
+        Uses PATCH (not PUT) for the intervening edit deliberately: PUT
+        is full-replace and, per test_update_prompt_omitting_collection_id_
+        clears_existing_assignment in test_api.py, already-verified-correct
+        behavior clears collection_id when it's omitted from the body -
+        using PUT here would clear collection_id to None BEFORE restore
+        ever runs, breaking this test's own "currently assigned to a
+        collection" precondition for a reason unrelated to restore.
+        PATCH's partial-update semantics correctly leave collection_id
+        untouched when omitted, so the precondition actually holds."""
         collection = client.post("/collections", json=sample_collection_data).json()
         created = client.post(
             "/prompts",
@@ -399,7 +409,7 @@ class TestRestoreVersion:
             },
         ).json()
 
-        client.put(
+        client.patch(
             f"/prompts/{created['id']}",
             json={"title": "Edited", "content": "Edited content"},
         )
