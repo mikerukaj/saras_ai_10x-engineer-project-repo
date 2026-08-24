@@ -134,7 +134,12 @@ def create_prompt(prompt_data: PromptCreate):
 
     prompt = Prompt(**prompt_data.model_dump())
     created = storage.create_prompt(prompt)
-    storage.create_version(created.id, created.title, created.content, created.description)
+    storage.create_version(
+        created.id,
+        title=created.title,
+        content=created.content,
+        description=created.description,
+    )
     return created
 
 
@@ -177,7 +182,12 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         or prompt_data.description != existing.description
     )
     if content_changed:
-        storage.create_version(existing.id, existing.title, existing.content, existing.description)
+        storage.create_version(
+            existing.id,
+            title=existing.title,
+            content=existing.content,
+            description=existing.description,
+        )
 
     updated_prompt = Prompt(
         id=existing.id,
@@ -538,7 +548,7 @@ def delete_collection(collection_id: str):
         raise HTTPException(status_code=404, detail="Collection not found")
 
     for prompt in storage.get_prompts_by_collection(collection_id):
-        storage.update_prompt(prompt.id, Prompt(
+        unassigned_prompt = Prompt(
             id=prompt.id,
             title=prompt.title,
             content=prompt.content,
@@ -546,7 +556,8 @@ def delete_collection(collection_id: str):
             collection_id=None,
             created_at=prompt.created_at,
             updated_at=get_current_time()
-        ))
+        )
+        storage.update_prompt(prompt.id, unassigned_prompt)
 
     storage.delete_collection(collection_id)
     return None
