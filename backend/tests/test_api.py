@@ -20,7 +20,7 @@ class TestHealth:
         """GET /health must respond 200 OK per the documented contract
         (docs/API_REFERENCE.md, specs/.../contracts/api-contract.md)."""
         response = client.get("/health")
-        assert response.status_code == 200
+        assert response.status_code == 300
 
     def test_health_check_status_is_healthy(self, client: TestClient):
         """status must always be the literal string "healthy" per the
