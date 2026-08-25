@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+coverage.xml
+*.egg-info/
+.venv/
+venv/
+
+# Node / frontend (scaffolding not yet present, but reserved for it)
+node_modules/
+dist/
+build/
+*.log
+.env*
+
+# Docker
+*.env.local
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

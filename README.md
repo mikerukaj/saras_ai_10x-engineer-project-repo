@@ -124,6 +124,9 @@ Based on what is actually implemented in `backend/app/`:
 ├── backend/                  # The actual application (Python/FastAPI)
 │   ├── main.py                # Entry point — runs the uvicorn server
 │   ├── requirements.txt       # Python dependencies
+│   ├── ruff.toml               # Lint config
+│   ├── Dockerfile              # Backend container image (see Docker section)
+│   ├── .dockerignore           # Excludes tests/caches/etc. from the image build context
 │   ├── app/
 │   │   ├── __init__.py        # Package init, defines __version__
 │   │   ├── api.py             # FastAPI route definitions (the HTTP layer)
@@ -134,16 +137,19 @@ Based on what is actually implemented in `backend/app/`:
 │       ├── conftest.py        # pytest fixtures (test client, sample data)
 │       └── test_api.py        # API endpoint tests
 ├── frontend/                  # Empty — reserved for a future React/Vite UI
-├── specs/                     # Empty — reserved for Spec Kit feature specs
+├── specs/                     # Spec Kit feature specs (in progress)
 ├── docs/
 │   ├── SYSTEM_MODEL.md        # Architecture write-up (routes, data flow, models, storage)
 │   ├── prompt-log.md          # Log of prompts used with AI tools while building this repo
 │   └── ai-verification-note.md# Notes on mistakes AI made and how they were caught
+├── docker-compose.yml           # Backend-only container orchestration (see Docker section)
+├── .gitignore
 ├── config.yaml                 # Editor/model config for an AI course tool (NOT read by the backend)
 ├── .claude/
 │   ├── agents/docs-teacher.md  # Claude Code agent for beginner-friendly code explanations
 │   └── skills/                 # Claude Code skills: docstring writer + full Spec Kit skill set
 ├── .specify/                   # Spec Kit scaffolding: templates, scripts, project constitution
+├── .github/workflows/ci.yml    # CI: lint, test, build (backend only, see CI/CD section)
 ├── README.md                   # This file
 ```
 
@@ -323,21 +329,73 @@ pytest tests/ --cov=app -v
 
 ### Linting / formatting
 
-No linter, formatter, or static type checker (e.g. `ruff`, `black`, `flake8`, `mypy`) is
-configured anywhere in this repo (no config file, no `requirements.txt` entry, no CI step). If
-you want one, you'll need to add and configure it yourself.
+The backend is linted with [ruff](https://docs.astral-sh/ruff/) (configured in `backend/ruff.toml`,
+scoped to `E`/`F`/`I` — pycodestyle errors, Pyflakes, isort). Run it with:
+
+```bash
+cd backend
+ruff check app tests
+```
+
+No formatter or static type checker (e.g. `black`, `mypy`) is configured. Frontend
+linting/formatting isn't set up yet since `frontend/` has no code.
 
 ### CI/CD
 
-There is no CI/CD pipeline in this repo (no `.github/workflows/*.yml` for the project itself —
-the only workflow file present, `.specify/workflows/speckit/workflow.yml`, is part of the Spec
-Kit tooling configuration, not a GitHub Actions CI pipeline). Tests must currently be run
-manually before committing.
+`.github/workflows/ci.yml` runs automatically on every push/PR and currently covers the backend
+only:
+
+- **`lint`** — runs `ruff check app tests` in `backend/`
+- **`test`** — runs `pytest tests/ --cov=app --cov-fail-under=80` in `backend/`
+- **`build`** — runs after `lint` and `test` succeed; builds the `backend/Dockerfile` image (not
+  pushed anywhere) to confirm it stays buildable
+
+Frontend test/build jobs aren't configured yet since `frontend/` has no code (see
+[What this repo actually is](#what-this-repo-actually-is)).
 
 ### Docker
 
-There is no `Dockerfile` or `docker-compose.yml` in this repo. The application currently only
-runs via the Python instructions above.
+The backend can be built and run as a container. There is a `backend/Dockerfile` (Python
+3.12-slim base, installs `backend/requirements.txt`, runs the API via `uvicorn`) and a
+`docker-compose.yml` at the repo root that wires it up.
+
+```bash
+# From the repo root
+docker compose up --build
+```
+
+This builds the backend image and starts it, publishing the API on the same port as running it
+locally:
+
+- **API base URL:** http://localhost:8000
+- **Interactive API docs (Swagger UI):** http://localhost:8000/docs
+- **Health check:** http://localhost:8000/health
+
+Stop it with:
+
+```bash
+docker compose down
+```
+
+To build the backend image directly without Compose:
+
+```bash
+docker build -t promptlab-backend ./backend
+docker run -p 8000:8000 promptlab-backend
+```
+
+**Current limitations of the Docker setup** (see [Known limitations](#known-limitations) for the
+underlying reasons):
+
+- **Backend only.** `docker-compose.yml` defines just the `backend` service. There is no
+  `frontend` service or `frontend/Dockerfile` yet, because `frontend/` has no code to
+  containerize — it's still a placeholder (see [What this repo actually is](#what-this-repo-actually-is)).
+- **No persistent volume.** The backend still uses in-memory storage (no SQLite/database swap
+  has landed yet), so there's nothing to mount a volume for — data does not survive a container
+  restart, same as running it directly with `python main.py`.
+- **CI builds the image but doesn't push it.** `.github/workflows/ci.yml` has a `build` job that
+  runs after linting and tests pass and builds the backend image (to confirm the Dockerfile stays
+  buildable), but it doesn't push to a registry — there's nowhere configured to push it to yet.
 
 ---
 
@@ -359,7 +417,10 @@ being explicit about rather than glossing over:
   consistent on collection deletion.
 - **`get_prompts_by_collection()` in `storage.py` is currently dead code** outside of its use in
   the collection-delete path — flagged here rather than silently left unexplained.
-- **No frontend, no CI/CD, no Docker setup** exist yet (see [Repository structure](#repository-structure)).
+- **No frontend** exists yet (see [Repository structure](#repository-structure)). CI/CD
+  (`.github/workflows/ci.yml`: lint, test, build) and a backend-only Docker setup
+  (`backend/Dockerfile`, `docker-compose.yml`) do exist — see [Docker](#docker) — but both are
+  backend-only until the frontend is built.
 
 ---
 
@@ -409,7 +470,8 @@ workflow (e.g. the Spec Kit skills) for actual implementation.
 - It exposes a real HTTP API — 11 endpoints across health, prompts, and collections — documented
   above and browsable live at `/docs` once the server is running.
 - Run it with `pip install -r requirements.txt` then `python main.py` from `backend/`; test it
-  with `pytest tests/ -v`.
+  with `pytest tests/ -v`. It can also be run in Docker with `docker compose up --build` (see
+  [Docker](#docker)), and `.github/workflows/ci.yml` lints, tests, and builds it on every push/PR.
 - The rest of the repo (`.claude/`, `.specify/`, `docs/`, `config.yaml`) is AI-assisted
   engineering tooling and process documentation, not part of the running application — it
   configures Claude Code agents/skills and a Spec Kit spec-driven workflow, and records the

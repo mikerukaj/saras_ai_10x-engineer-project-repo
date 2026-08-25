@@ -1,0 +1,17 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    # NOTE: no volume is mounted for a SQLite database file here because the
+    # SQLModel/SQLite persistence swap (tasks.md Phase 2, T004-T006) has not
+    # been implemented yet — the backend still uses in-memory storage, so
+    # data does not survive a container restart. Add a named volume once
+    # that swap lands.
+
+  # NOTE: no `frontend` service yet — frontend/ only contains a placeholder
+  # .gitkeep (Phases 1-4 of tasks.md, which scaffold the React/Vite app,
+  # haven't been implemented). Add this service once frontend/Dockerfile
+  # (task T036) exists.
