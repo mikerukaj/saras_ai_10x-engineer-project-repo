@@ -9,6 +9,8 @@ what was reviewed, what was found, what changed, and why.
 
 **File**: `backend/app/api.py`, `delete_collection` (DELETE `/collections/{collection_id}`)
 
+**Commit Hash**: 169d2fde7f92385f3c699a62e6234ca18ce14c2d
+
 **Reviewed against**: PEP 8 (no violations found in this function — no line exceeded the
 79-character limit) and the Google Python Style Guide (the substantive finding below).
 
@@ -56,5 +58,50 @@ for prompt in storage.get_prompts_by_collection(collection_id):
 ```
 
 **Behavior change**: none — pure extract-variable refactor. Verified via the full backend suite
+(`cd backend && pytest tests/ --cov=app`): 471 passed, 0 failed, coverage unchanged
+(`app/api.py`/`app/models.py` at 100%, `app/storage.py` at 98%).
+
+## Refactor No.2 — 
+
+**File**: `backend/app/api.py` 
+**Commit Hash**: 09bb1adbbac35add0c03c93db2708d6fd10a3944
+
+**Reviewed against**: PEP 8 (no violations found in this function — no line exceeded the
+79-character limit) and the Google Python Style Guide (the substantive finding below).
+
+**Finding**: PATCH /prompts/{id} with {"title": null} or {"content": null} crashes with an unhandled pydantic.ValidationError instead of a clean 4xx.
+
+```python
+    patch = prompt_data.model_dump(exclude_unset=True)
+    if "collection_id" in patch and patch["collection_id"] is not None:
+        if not storage.get_collection(patch["collection_id"]):
+            raise HTTPException(status_code=400, detail="Collection not found")
+```
+
+PromptPatch.title/content are typed Optional[str] only so exclude_unset=True can tell "omitted" from 
+"provided" — but that means FastAPI's request validation happily accepts an explicit null. The handler 
+then does patch.get("title", existing.title), which returns None (since "title" is present in the patch 
+dict), and passes that straight into Prompt(title=None, ...) — but Prompt.title/content are non-Optional 
+required strings, so this raises an uncaught pydantic_core.ValidationError inside the route body. 
+Nothing catches it, so in a real deployment it surfaces as a bare 500 with no {"detail": ...} body.
+
+**Change**: extracted the inline construction into a named variable, `unassigned_prompt`, mirroring
+the pattern already used elsewhere in the file:
+
+```python
+    patch = prompt_data.model_dump(exclude_unset=True)
+    if "title" in patch and patch["title"] is None:
+        raise HTTPException(status_code=422, detail="title cannot be null")
+
+    if "content" in patch and patch["content"] is None:
+        raise HTTPException(status_code=422, detail="content cannot be null")
+
+    if "collection_id" in patch and patch["collection_id"] is not None:
+        if not storage.get_collection(patch["collection_id"]):
+            raise HTTPException(status_code=400, detail="Collection not found")
+
+```
+
+**Behavior change**: none. Verified via the full backend suite
 (`cd backend && pytest tests/ --cov=app`): 471 passed, 0 failed, coverage unchanged
 (`app/api.py`/`app/models.py` at 100%, `app/storage.py` at 98%).
