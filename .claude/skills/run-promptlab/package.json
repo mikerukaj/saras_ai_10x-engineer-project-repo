@@ -1,0 +1,10 @@
+{
+  "name": "run-promptlab-driver",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Agent tooling only - the Playwright dependency for driver.mjs. Not part of the PromptLab app itself.",
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}
