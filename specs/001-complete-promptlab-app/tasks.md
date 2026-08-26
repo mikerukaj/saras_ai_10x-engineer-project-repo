@@ -6,7 +6,7 @@ description: "Task list for Complete PromptLab Application"
 # Tasks: Complete PromptLab Application
 
 **Input**: Design documents from `/specs/001-complete-promptlab-app/`
-**Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/api-contract.md](./contracts/api-contract.md), [quickstart.md](./quickstart.md), [../prompt-versions.md](../prompt-versions.md) (Phase 8 / User Story 5 only), [../tagging-system.md](../tagging-system.md) (Phase 9 / User Story 6 only)
+**Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/api-contract.md](./contracts/api-contract.md), [quickstart.md](./quickstart.md), [../prompt-versions.md](../prompt-versions.md) (Phase 8 / User Story 5 only), [../tagging-system.md](../tagging-system.md) (Phase 9 / User Story 6 only), [../frontend.md](../frontend.md) (Phase 10 only)
 
 **Tests**: The spec's User Story 2 (P2) makes comprehensive automated test coverage a first-class deliverable (FR-013–FR-017), so test-writing tasks are included as that story's implementation, not as optional TDD scaffolding for the other stories.
 
@@ -199,6 +199,34 @@ Matches [plan.md](./plan.md)'s Project Structure: `backend/app/`, `backend/tests
 
 ---
 
+## Phase 10: Frontend Architecture Refinements (from specs/frontend.md)
+
+**Purpose**: [specs/frontend.md](../frontend.md) is a frontend architecture spec that breaks several existing page-level tasks (T014, T015/T016, T017/T019/T020, T022, T058/T059, T074/T076) down into a finer-grained, reusable component inventory, and specifies a few components/screens (shared layout, `EmptyState`, `ConfirmDialog`, `NotFoundPage`, a dedicated `hooks.ts`) that no existing task covers at all. These tasks are additive refinements of Phases 2, 3, 8, and 9 — they do not replace or duplicate the page-level work already planned there, they extract pieces of it into the standalone files [specs/frontend.md](../frontend.md) specifies.
+
+**Note on file paths**: [specs/frontend.md](../frontend.md) groups prompt/collection/tag components into `components/prompt/`, `components/collection/`, `components/tag/` subfolders. Two already-existing tasks (T013 `PromptContent.tsx`, T073 `TagInput.tsx`) were planned at the flat `frontend/src/components/` path before this convention existed; per this command's "do nothing if it already exists" instruction they are left as-is rather than moved, so a future pass should either relocate them into their domain subfolder or treat the flat path as an accepted exception.
+
+- [ ] T079 [P] Build TanStack Query hooks (`usePrompts`, `usePrompt`, `useCreatePrompt`, `useUpdatePrompt`, `useDeletePrompt`, `usePromptVersions`, `useCollections`, `useTags`, etc.) wrapping the typed client in `frontend/src/api/hooks.ts` (depends on T010)
+- [ ] T080 [P] Build a `NavBar` component (links: Prompts, Collections, Tags) in `frontend/src/components/NavBar.tsx` (depends on T011)
+- [ ] T081 Build an `AppShell` layout component (nav bar + main content slot) in `frontend/src/components/AppShell.tsx`, composed into the routing shell (depends on T080, T011, feeds into T012)
+- [ ] T082 [P] Build an `EmptyState` component (message + optional call-to-action) in `frontend/src/components/EmptyState.tsx` (depends on T011)
+- [ ] T083 [P] Build a shared `ConfirmDialog` component in `frontend/src/components/ConfirmDialog.tsx`, intended to replace the ad hoc confirmation steps in T021 (delete prompt), T022 (delete collection), T060 (restore), T061 (delete version), and T076 (delete tag) (depends on T011)
+- [ ] T084 Build a `NotFoundPage` (unmatched-route fallback, links back to the prompt list) in `frontend/src/pages/NotFoundPage.tsx`, wired into the router (depends on T081, T012)
+- [ ] T085 [P] [US1] Extract a `PromptListItem` component (title, description, collection badge, tag badges) in `frontend/src/components/prompt/PromptListItem.tsx`, used by `PromptListPage` (depends on T014)
+- [ ] T086 [US1] Extract search input + collection filter + tag filter into a `PromptFilters` component synced to URL search params (`useSearchParams`) in `frontend/src/components/prompt/PromptFilters.tsx`, used by `PromptListPage` (depends on T015, T016; extended by T075's tag filter)
+- [ ] T087 [US1] Extract a shared `PromptForm` component (title, content, description, collection, tags; used by both create and edit) in `frontend/src/components/prompt/PromptForm.tsx`, consumed by `PromptCreatePage` and `PromptEditPage` in place of their separate inline forms (depends on T017, T020)
+- [ ] T088 [P] [US1] Extract a `CollectionSelect` dropdown component in `frontend/src/components/prompt/CollectionSelect.tsx`, used by `PromptForm` and `PromptFilters` (depends on T087)
+- [ ] T089 [P] [US1] Extract the copy-to-clipboard control into a standalone `CopyButton` component in `frontend/src/components/prompt/CopyButton.tsx`, used by `PromptDetailPage` (depends on T019)
+- [ ] T090 [P] [US1] Extract a `CollectionListItem` component (name, description, prompt count, delete action) in `frontend/src/components/collection/CollectionListItem.tsx`, used by `CollectionsPage` (depends on T022)
+- [ ] T091 [US5] Extract the version history list into a standalone `VersionHistoryPanel` component in `frontend/src/components/prompt/VersionHistoryPanel.tsx`, used by `PromptDetailPage` (depends on T058)
+- [ ] T092 [P] [US5] Build a `VersionListItem` component (one entry in the history list) in `frontend/src/components/prompt/VersionListItem.tsx`, used by `VersionHistoryPanel` (depends on T091)
+- [ ] T093 [US5] Extract the past-version detail view into a standalone `VersionDetailView` component in `frontend/src/components/prompt/VersionDetailView.tsx`, used by `VersionHistoryPanel` (depends on T059, T091)
+- [ ] T094 [P] [US6] Build a `TagBadge` chip component in `frontend/src/components/tag/TagBadge.tsx`, used by `PromptListItem` and `PromptDetailPage` to display a prompt's tags (depends on T074)
+- [ ] T095 [US6] Extract a `TagListItem` component (name, `prompt_count`, rename, delete) in `frontend/src/components/tag/TagListItem.tsx`, used by `TagsPage` (depends on T076)
+
+**Checkpoint**: The frontend's component structure matches the inventory in [specs/frontend.md](../frontend.md) — shared layout/primitives are standalone, and each page composes reusable domain components rather than embedding page-specific markup inline.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -212,6 +240,7 @@ Matches [plan.md](./plan.md)'s Project Structure: `backend/app/`, `backend/tests
 - **Polish (Phase 7)**: Depends on all desired user stories being complete
 - **User Story 5 (Phase 8)**: Depends on Foundational and US1's prompt detail/edit pages (T018, T020); independent of Phases 4–7 otherwise, so it can proceed in parallel with US2/US3/US4/Polish once US1 is done
 - **User Story 6 (Phase 9)**: Depends on Foundational and US1's prompt create/edit/list pages (T014, T017, T018, T020); independent of Phases 4–8 otherwise, so it can proceed in parallel with US2/US3/US4/US5/Polish once US1 is done
+- **Frontend Architecture Refinements (Phase 10)**: Each task depends only on the specific existing task(s) it extracts/extends (noted per task) — not on the phases those tasks belong to being fully complete. In practice, most of Phase 10 becomes actionable incrementally as Phases 2, 3, 8, and 9 land, rather than as one block after Phase 9
 
 ### User Story Dependencies
 
@@ -239,6 +268,7 @@ Matches [plan.md](./plan.md)'s Project Structure: `backend/app/`, `backend/tests
 - Phase 7 documentation tasks (T045–T047) can all run in parallel
 - Within US5: T049 (models) can start alongside other Phase 4–7 work once Foundational is done; T056 (backend tests) and T061 (checkpoint/delete actions) are independent files and can run in parallel once their prerequisites land
 - Within US6: T064 (models) can start alongside other Phase 4–8 work once Foundational is done; T071 (backend tests), T073 (tag input component), and T077 (frontend tests) are independent files and can run in parallel once their prerequisites land
+- Within Phase 10: T079, T080, T082, T083 (independent foundational files) can run in parallel once T010/T011 land; T085, T088, T089, T090 (US1 extractions) are independent files and can run in parallel once their source tasks land; T092 and T094 can likewise run in parallel with their neighboring US5/US6 tasks
 
 ---
 
