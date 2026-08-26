@@ -11,7 +11,17 @@ services:
     # data does not survive a container restart. Add a named volume once
     # that swap lands.
 
-  # NOTE: no `frontend` service yet — frontend/ only contains a placeholder
-  # .gitkeep (Phases 1-4 of tasks.md, which scaffold the React/Vite app,
-  # haven't been implemented). Add this service once frontend/Dockerfile
-  # (task T036) exists.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    # The frontend's API base URL (src/api/client.ts) defaults to
+    # http://localhost:8000, which is baked in at build time and resolves
+    # correctly here because the browser (not the container) makes the
+    # request — it hits the backend's port published on the host above, not
+    # a container-network address. No VITE_API_BASE_URL override needed for
+    # this default setup.

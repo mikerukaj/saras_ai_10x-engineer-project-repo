@@ -136,13 +136,16 @@ Based on what is actually implemented in `backend/app/`:
 │   └── tests/
 │       ├── conftest.py        # pytest fixtures (test client, sample data)
 │       └── test_api.py        # API endpoint tests
-├── frontend/                  # Empty — reserved for a future React/Vite UI
+├── frontend/                  # React/Vite/TypeScript UI
+│   ├── Dockerfile              # Frontend container image: builds via Node, serves via nginx
+│   ├── nginx.conf               # SPA fallback routing for the nginx-served production build
+│   └── .dockerignore            # Excludes node_modules/dist/etc. from the image build context
 ├── specs/                     # Spec Kit feature specs (in progress)
 ├── docs/
 │   ├── SYSTEM_MODEL.md        # Architecture write-up (routes, data flow, models, storage)
 │   ├── prompt-log.md          # Log of prompts used with AI tools while building this repo
 │   └── ai-verification-note.md# Notes on mistakes AI made and how they were caught
-├── docker-compose.yml           # Backend-only container orchestration (see Docker section)
+├── docker-compose.yml           # Full-stack (backend + frontend) container orchestration (see Docker section)
 ├── .gitignore
 ├── config.yaml                 # Editor/model config for an AI course tool (NOT read by the backend)
 ├── .claude/
@@ -355,21 +358,31 @@ Frontend test/build jobs aren't configured yet since `frontend/` has no code (se
 
 ### Docker
 
-The backend can be built and run as a container. There is a `backend/Dockerfile` (Python
-3.12-slim base, installs `backend/requirements.txt`, runs the API via `uvicorn`) and a
-`docker-compose.yml` at the repo root that wires it up.
+The whole app — backend and frontend together — can be built and run as containers. There is a
+`backend/Dockerfile` (Python 3.12-slim base, installs `backend/requirements.txt`, runs the API via
+`uvicorn`), a `frontend/Dockerfile` (multi-stage: Node 22 builds the Vite production bundle, then
+an `nginx:alpine` stage serves the static `dist/` output with a fallback route to `index.html`
+for client-side/React Router navigation), and a `docker-compose.yml` at the repo root that wires
+both up together.
 
 ```bash
 # From the repo root
 docker compose up --build
 ```
 
-This builds the backend image and starts it, publishing the API on the same port as running it
-locally:
+This builds both images and starts them together:
 
-- **API base URL:** http://localhost:8000
+- **Frontend (the app UI):** http://localhost:5173
+- **Backend API base URL:** http://localhost:8000
 - **Interactive API docs (Swagger UI):** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/health
+
+The frontend container serves a static production build, so it talks to the backend at
+`http://localhost:8000` the same way the browser would if you ran everything locally — no
+extra networking config is needed for the default setup, since that URL is baked in at build time
+(`frontend/src/api/client.ts`) and resolved by your browser, not by the container network. If you
+need the frontend to call a differently-hosted backend, set `VITE_API_BASE_URL` as a build arg
+before building the frontend image.
 
 Stop it with:
 
@@ -377,25 +390,32 @@ Stop it with:
 docker compose down
 ```
 
-To build the backend image directly without Compose:
+To build and run either image directly without Compose:
 
 ```bash
+# Backend
 docker build -t promptlab-backend ./backend
 docker run -p 8000:8000 promptlab-backend
+
+# Frontend
+docker build -t promptlab-frontend ./frontend
+docker run -p 5173:80 promptlab-frontend
 ```
 
 **Current limitations of the Docker setup** (see [Known limitations](#known-limitations) for the
 underlying reasons):
 
-- **Backend only.** `docker-compose.yml` defines just the `backend` service. There is no
-  `frontend` service or `frontend/Dockerfile` yet, because `frontend/` has no code to
-  containerize — it's still a placeholder (see [What this repo actually is](#what-this-repo-actually-is)).
 - **No persistent volume.** The backend still uses in-memory storage (no SQLite/database swap
   has landed yet), so there's nothing to mount a volume for — data does not survive a container
   restart, same as running it directly with `python main.py`.
-- **CI builds the image but doesn't push it.** `.github/workflows/ci.yml` has a `build` job that
-  runs after linting and tests pass and builds the backend image (to confirm the Dockerfile stays
-  buildable), but it doesn't push to a registry — there's nowhere configured to push it to yet.
+- **Frontend serves a static production build, not a dev server.** There's no hot-reload inside
+  the container — for active frontend development, run `npm run dev` locally instead (see
+  [Development setup](#development-setup)) and reserve the Docker path for a closer-to-production
+  smoke test.
+- **CI builds the backend image but doesn't push it, and doesn't build the frontend image yet.**
+  `.github/workflows/ci.yml` has a `build` job that runs after linting and tests pass and builds
+  the backend image (to confirm the Dockerfile stays buildable), but it doesn't push to a registry
+  and doesn't yet have a corresponding step for `frontend/Dockerfile`.
 
 ---
 
@@ -417,10 +437,10 @@ being explicit about rather than glossing over:
   consistent on collection deletion.
 - **`get_prompts_by_collection()` in `storage.py` is currently dead code** outside of its use in
   the collection-delete path — flagged here rather than silently left unexplained.
-- **No frontend** exists yet (see [Repository structure](#repository-structure)). CI/CD
-  (`.github/workflows/ci.yml`: lint, test, build) and a backend-only Docker setup
-  (`backend/Dockerfile`, `docker-compose.yml`) do exist — see [Docker](#docker) — but both are
-  backend-only until the frontend is built.
+- **CI is backend-only.** `.github/workflows/ci.yml` (lint, test, build) only covers `backend/`.
+  The Docker setup (`backend/Dockerfile`, `frontend/Dockerfile`, `docker-compose.yml`) now covers
+  both frontend and backend together — see [Docker](#docker) — but CI hasn't been updated to build
+  the frontend image yet.
 
 ---
 
@@ -470,8 +490,9 @@ workflow (e.g. the Spec Kit skills) for actual implementation.
 - It exposes a real HTTP API — 11 endpoints across health, prompts, and collections — documented
   above and browsable live at `/docs` once the server is running.
 - Run it with `pip install -r requirements.txt` then `python main.py` from `backend/`; test it
-  with `pytest tests/ -v`. It can also be run in Docker with `docker compose up --build` (see
-  [Docker](#docker)), and `.github/workflows/ci.yml` lints, tests, and builds it on every push/PR.
+  with `pytest tests/ -v`. The full app (backend + frontend together) can also be run in Docker
+  with `docker compose up --build` from the repo root (see [Docker](#docker)), and
+  `.github/workflows/ci.yml` lints, tests, and builds the backend on every push/PR.
 - The rest of the repo (`.claude/`, `.specify/`, `docs/`, `config.yaml`) is AI-assisted
   engineering tooling and process documentation, not part of the running application — it
   configures Claude Code agents/skills and a Spec Kit spec-driven workflow, and records the
