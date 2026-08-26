@@ -19,6 +19,10 @@ from app.models import (
     PromptVersion,
     PromptVersionCreate,
     PromptVersionList,
+    Tag,
+    TagCreate,
+    TagList,
+    TagRename,
     get_current_time,
 )
 from app.storage import storage
@@ -38,6 +42,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _with_tags(prompt: Prompt) -> Prompt:
+    """Attach a prompt's current tags for API responses.
+
+    Tags are tracked as a separate prompt<->tag link in storage rather
+    than being embedded on the stored Prompt object itself, so every
+    outgoing Prompt is passed through this helper to populate its tags
+    field, the same way a SQL join would at read time.
+
+    Args:
+        prompt (Prompt): The prompt to attach current tags to.
+
+    Returns:
+        Prompt: A copy of prompt with tags populated.
+    """
+    return prompt.model_copy(update={"tags": storage.get_prompt_tags(prompt.id)})
 
 
 # ============== Health Check ==============
@@ -62,9 +83,11 @@ def health_check():
 @app.get("/prompts", response_model=PromptList)
 def list_prompts(
     collection_id: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    tags: Optional[str] = None,
 ):
-    """List prompts, optionally filtered by collection and/or search text.
+    """List prompts, optionally filtered by collection, search text,
+    and/or tags.
 
     Results are sorted by creation date, newest first.
 
@@ -73,6 +96,9 @@ def list_prompts(
             to this collection are included.
         search (Optional[str]): If provided, only prompts whose title or
             description contain this text (case-insensitive) are included.
+        tags (Optional[str]): If provided, a comma-separated list of tag
+            names; only prompts carrying at least one of them (OR match,
+            case-insensitive) are included.
 
     Returns:
         PromptList: The matching prompts and the total count.
@@ -82,19 +108,28 @@ def list_prompts(
         PromptList(prompts=[...], total=2)
     """
     prompts = storage.get_all_prompts()
-    
+
     # Filter by collection if specified
     if collection_id:
         prompts = filter_prompts_by_collection(prompts, collection_id)
-    
+
     # Search if query provided
     if search:
         prompts = search_prompts(prompts, search)
-    
+
+    # Filter by tags if specified (OR match, case-insensitive)
+    if tags:
+        wanted = {name.strip().lower() for name in tags.split(",") if name.strip()}
+        prompts = [
+            p for p in prompts
+            if wanted & {t.name.lower() for t in storage.get_prompt_tags(p.id)}
+        ]
+
     # Sort by date (newest first)
     # Note: There might be an issue with the sorting...
     prompts = sort_prompts_by_date(prompts, descending=True)
-    
+
+    prompts = [_with_tags(p) for p in prompts]
     return PromptList(prompts=prompts, total=len(prompts))
 
 
@@ -105,13 +140,13 @@ def get_prompt(prompt_id: str):
         prompt_id: The unique identifier fo the prompt to retrieve.
     Returns:
         The prompt if found, raises exception otherwise.
-    Raises: 
+    Raises:
         HTTPException: If prompt_id is not found.
     """
     prompt = storage.get_prompt(prompt_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
-    return prompt
+    return _with_tags(prompt)
 
 
 @app.post("/prompts", response_model=Prompt, status_code=201)
@@ -140,7 +175,7 @@ def create_prompt(prompt_data: PromptCreate):
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
 
-    prompt = Prompt(**prompt_data.model_dump())
+    prompt = Prompt(**prompt_data.model_dump(exclude={"tags"}))
     created = storage.create_prompt(prompt)
     storage.create_version(
         created.id,
@@ -148,7 +183,8 @@ def create_prompt(prompt_data: PromptCreate):
         content=created.content,
         description=created.description,
     )
-    return created
+    storage.set_prompt_tags(created.id, prompt_data.tags or [])
+    return _with_tags(created)
 
 
 @app.put("/prompts/{prompt_id}", response_model=Prompt)
@@ -207,7 +243,9 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         updated_at=get_current_time()
     )
 
-    return storage.update_prompt(prompt_id, updated_prompt)
+    stored = storage.update_prompt(prompt_id, updated_prompt)
+    storage.set_prompt_tags(prompt_id, prompt_data.tags or [])
+    return _with_tags(stored)
 
 
 @app.patch("/prompts/{prompt_id}", response_model=Prompt)
@@ -270,7 +308,15 @@ def patch_prompt(prompt_id: str, prompt_data: PromptPatch):
         created_at=existing.created_at,
         updated_at=get_current_time()
     )
-    return storage.update_prompt(prompt_id, updated_prompt)
+    stored = storage.update_prompt(prompt_id, updated_prompt)
+
+    # tags follows the patch's partial-update convention: omit the key
+    # entirely to leave tags unchanged; include it (even as []) to fully
+    # replace the prompt's tag set.
+    if "tags" in patch:
+        storage.set_prompt_tags(prompt_id, patch["tags"] or [])
+
+    return _with_tags(stored)
 
 
 @app.delete("/prompts/{prompt_id}", status_code=204)
@@ -292,6 +338,7 @@ def delete_prompt(prompt_id: str):
     if not storage.delete_prompt(prompt_id):
         raise HTTPException(status_code=404, detail="Prompt not found")
     storage.delete_versions_by_prompt(prompt_id)
+    storage.remove_prompt_tag_links(prompt_id)
     return None
 
 
@@ -434,7 +481,7 @@ def restore_prompt_version(prompt_id: str, version_id: str):
         created_at=existing.created_at,
         updated_at=get_current_time()
     )
-    return storage.update_prompt(prompt_id, restored_prompt)
+    return _with_tags(storage.update_prompt(prompt_id, restored_prompt))
 
 
 @app.delete("/prompts/{prompt_id}/versions/{version_id}", status_code=204)
@@ -465,6 +512,133 @@ def delete_prompt_version(prompt_id: str, version_id: str):
         raise HTTPException(status_code=404, detail="Version not found")
 
     storage.delete_version(version_id)
+    return None
+
+
+# ============== Tag Endpoints ==============
+
+@app.get("/tags", response_model=TagList)
+def list_tags():
+    """List every tag currently in use, each with its prompt_count.
+
+    Returns:
+        TagList: All stored tags and the total count.
+
+    Example:
+        >>> list_tags()
+        TagList(tags=[...], total=2)
+    """
+    tags = storage.get_all_tags_with_counts()
+    return TagList(tags=tags, total=len(tags))
+
+
+@app.get("/tags/{tag_id}", response_model=Tag)
+def get_tag(tag_id: str):
+    """Retrieve a tag by its unique identifier.
+
+    Args:
+        tag_id (str): The unique identifier of the tag to retrieve.
+
+    Returns:
+        Tag: The matching tag, with its current prompt_count.
+
+    Raises:
+        HTTPException: With status 404 if no tag with tag_id exists.
+
+    Example:
+        >>> get_tag("abc-123")
+        Tag(id='abc-123', name='marketing', ...)
+    """
+    tag = storage.get_tag(tag_id)
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return tag
+
+
+@app.post("/tags", response_model=Tag, status_code=201)
+def create_tag(tag_data: TagCreate):
+    """Explicitly create a new tag.
+
+    Unlike the implicit get-or-create that happens when tagging a prompt,
+    this call is a deliberate "create a new tag" request and rejects a
+    name collision rather than silently reusing the existing tag.
+
+    Args:
+        tag_data (TagCreate): The name for the new tag.
+
+    Returns:
+        Tag: The newly created tag.
+
+    Raises:
+        HTTPException: With status 409 if a tag with this name (in any
+            capitalization) already exists.
+
+    Example:
+        >>> create_tag(TagCreate(name="needs-review"))
+        Tag(name='needs-review', ...)
+    """
+    if storage.get_tag_by_name_case_insensitive(tag_data.name):
+        raise HTTPException(status_code=409, detail="Tag name already exists")
+    return storage.create_tag(tag_data.name)
+
+
+@app.patch("/tags/{tag_id}", response_model=Tag)
+def rename_tag(tag_id: str, tag_data: TagRename):
+    """Rename an existing tag.
+
+    The new name is reflected on every prompt that carries this tag,
+    since a prompt's tags are stored as a link to the Tag record, not a
+    copy of its name.
+
+    Args:
+        tag_id (str): The unique identifier of the tag to rename.
+        tag_data (TagRename): The tag's new name.
+
+    Returns:
+        Tag: The renamed tag.
+
+    Raises:
+        HTTPException: With status 404 if no tag with tag_id exists.
+        HTTPException: With status 409 if the new name collides (case-
+            insensitively) with a *different* existing tag. Renaming a
+            tag to its own current name (a case-only change) is not
+            treated as a collision.
+
+    Example:
+        >>> rename_tag("abc-123", TagRename(name="needs-final-review"))
+        Tag(id='abc-123', name='needs-final-review', ...)
+    """
+    if not storage.get_tag(tag_id):
+        raise HTTPException(status_code=404, detail="Tag not found")
+
+    collision = storage.get_tag_by_name_case_insensitive(tag_data.name)
+    if collision and collision.id != tag_id:
+        raise HTTPException(status_code=409, detail="Tag name already exists")
+
+    return storage.rename_tag(tag_id, tag_data.name)
+
+
+@app.delete("/tags/{tag_id}", status_code=204)
+def delete_tag(tag_id: str):
+    """Delete a tag by its unique identifier.
+
+    Removes the tag from every prompt that carried it; those prompts are
+    not deleted and their other fields are unaffected.
+
+    Args:
+        tag_id (str): The unique identifier of the tag to delete.
+
+    Returns:
+        None: No content is returned on successful deletion.
+
+    Raises:
+        HTTPException: With status 404 if no tag with tag_id exists.
+
+    Example:
+        >>> delete_tag("abc-123")
+    """
+    if not storage.delete_tag(tag_id):
+        raise HTTPException(status_code=404, detail="Tag not found")
     return None
 
 

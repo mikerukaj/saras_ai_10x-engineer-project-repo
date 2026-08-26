@@ -818,13 +818,20 @@ class TestErrorConditionsAndEdgeCases:
         (201 Prompt) is unchanged." This is verifiable and meaningful
         RIGHT NOW against the current, pre-feature implementation, since
         it asserts what should NOT change.
+
+        The expected key set includes "tags" because the separate,
+        later tagging feature (specs/tagging-system.md) added a
+        tags: Tag[] field to every Prompt response - unrelated to and
+        unaffected by versioning, but part of the current, correct
+        Prompt shape this test's baseline must match. See app/models.py
+        Prompt.tags.
         """
         response = client.post("/prompts", json=sample_prompt_data)
         assert response.status_code == 201
         data = response.json()
         assert set(data.keys()) == {
             "title", "content", "description", "collection_id",
-            "id", "created_at", "updated_at",
+            "id", "created_at", "updated_at", "tags",
         }
 
     def test_delete_prompt_response_shape_is_unchanged_by_versioning_feature(

@@ -68,7 +68,7 @@ class TestPrompts:
 
         assert set(data.keys()) == {
             "title", "content", "description", "collection_id",
-            "id", "created_at", "updated_at",
+            "id", "created_at", "updated_at", "tags",
         }
         assert data["title"] == sample_prompt_data["title"]
         assert data["content"] == sample_prompt_data["content"]
@@ -377,8 +377,9 @@ class TestPrompts:
 
         Intended behavior source: get_prompt docstring ("Returns: The
         prompt if found"), response_model=Prompt on the route, and
-        docs/API_REFERENCE.md's GET /prompts/{prompt_id} sample response,
-        which lists exactly these seven fields.
+        docs/API_REFERENCE.md's GET /prompts/{prompt_id} sample response
+        (predates the tags field added by the tagging feature - see
+        app/models.py Prompt.tags).
         """
         # Create a prompt first
         create_response = client.post("/prompts", json=sample_prompt_data)
@@ -391,7 +392,7 @@ class TestPrompts:
         # Full response shape matches the Prompt model - not just "has an id".
         assert set(data.keys()) == {
             "title", "content", "description", "collection_id",
-            "id", "created_at", "updated_at",
+            "id", "created_at", "updated_at", "tags",
         }
         assert data["id"] == created["id"]
         assert data["title"] == sample_prompt_data["title"]
@@ -681,7 +682,7 @@ class TestPrompts:
         data = response.json()
         assert set(data.keys()) == {
             "title", "content", "description", "collection_id",
-            "id", "created_at", "updated_at",
+            "id", "created_at", "updated_at", "tags",
         }
 
     def test_update_prompt_clears_description_when_omitted(
@@ -1118,7 +1119,7 @@ class TestPrompts:
         data = response.json()
         assert set(data.keys()) == {
             "title", "content", "description", "collection_id",
-            "id", "created_at", "updated_at",
+            "id", "created_at", "updated_at", "tags",
         }
 
     def test_patch_prompt_description_can_be_set_to_a_real_value(
@@ -2213,3 +2214,329 @@ class TestCollections:
         assert unlinked["created_at"] == created["created_at"]
         assert unlinked["collection_id"] is None
         assert unlinked["updated_at"] != created["updated_at"]
+
+
+class TestTags:
+    """Tests for the prompt tagging feature (specs/tagging-system.md).
+
+    Covers: attaching tags on create/edit (case-insensitive get-or-create,
+    within-request deduplication), the tags filter's OR semantics,
+    explicit tag CRUD (including rename-collision 409), and the
+    unassign-not-cascade deletion behavior in both directions
+    (deleting a prompt unlinks its tags without deleting them; deleting a
+    tag unlinks it from prompts without deleting them).
+    """
+
+    def test_create_prompt_with_new_tags_creates_and_attaches_them(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """POST /prompts with tags for names that don't exist yet must
+        create those tags automatically and attach them - no separate
+        "create tag" step required (tagging-system.md User Story 1,
+        Acceptance Scenario 2)."""
+        payload = {**sample_prompt_data, "tags": ["marketing", "needs-review"]}
+        response = client.post("/prompts", json=payload)
+        assert response.status_code == 201
+        tag_names = {t["name"] for t in response.json()["tags"]}
+        assert tag_names == {"marketing", "needs-review"}
+
+        all_tags = client.get("/tags").json()["tags"]
+        assert {t["name"] for t in all_tags} == {"marketing", "needs-review"}
+
+    def test_create_prompt_without_tags_field_has_no_tags(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """Omitting tags entirely must succeed and yield an empty list,
+        not an error - tags is optional."""
+        response = client.post("/prompts", json=sample_prompt_data)
+        assert response.status_code == 201
+        assert response.json()["tags"] == []
+
+    def test_create_prompt_reuses_existing_tag_case_insensitively(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """A tag name matching an existing tag in any capitalization must
+        reuse that tag rather than creating a near-duplicate
+        (tagging-system.md User Story 1, Acceptance Scenario 3)."""
+        first = client.post(
+            "/prompts", json={**sample_prompt_data, "tags": ["Marketing"]}
+        ).json()
+        second = client.post(
+            "/prompts",
+            json={
+                "title": "Another prompt",
+                "content": "Some other content here",
+                "tags": ["marketing"],
+            },
+        ).json()
+
+        assert first["tags"][0]["id"] == second["tags"][0]["id"]
+        assert len(client.get("/tags").json()["tags"]) == 1
+
+    def test_duplicate_tag_names_within_one_request_are_deduplicated(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """Submitting {"tags": ["Marketing", "marketing"]} on one prompt
+        must resolve both entries to the same tag - one link, not an
+        error and not two links (tagging-system.md Error Conditions)."""
+        response = client.post(
+            "/prompts", json={**sample_prompt_data, "tags": ["Marketing", "marketing"]}
+        )
+        assert response.status_code == 201
+        assert len(response.json()["tags"]) == 1
+
+    def test_edit_prompt_via_patch_replaces_tag_set(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """PATCH with tags is a full replacement of the prompt's tag set -
+        tags left off the new list are detached (tagging-system.md User
+        Story 1, Acceptance Scenario 4)."""
+        created = client.post(
+            "/prompts", json={**sample_prompt_data, "tags": ["a", "b"]}
+        ).json()
+
+        response = client.patch(f"/prompts/{created['id']}", json={"tags": ["b", "c"]})
+        assert response.status_code == 200
+        assert {t["name"] for t in response.json()["tags"]} == {"b", "c"}
+
+    def test_patch_prompt_omitting_tags_key_leaves_tags_unchanged(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """PATCH follows the partial-update convention for tags too:
+        omitting the key entirely must leave the prompt's existing tags
+        untouched."""
+        created = client.post(
+            "/prompts", json={**sample_prompt_data, "tags": ["a", "b"]}
+        ).json()
+
+        response = client.patch(f"/prompts/{created['id']}", json={"description": "x"})
+        assert response.status_code == 200
+        assert {t["name"] for t in response.json()["tags"]} == {"a", "b"}
+
+    def test_patch_prompt_with_empty_tags_list_clears_tags(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """Including tags as [] on a PATCH must fully clear the prompt's
+        tags, per PATCH's "include it (even as []) to fully replace"
+        convention."""
+        created = client.post(
+            "/prompts", json={**sample_prompt_data, "tags": ["a", "b"]}
+        ).json()
+
+        response = client.patch(f"/prompts/{created['id']}", json={"tags": []})
+        assert response.status_code == 200
+        assert response.json()["tags"] == []
+
+    def test_edit_prompt_via_put_without_tags_clears_them(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """PUT is a full replace; omitting tags means "no tags" for the
+        updated prompt, matching PUT's existing full-replace semantics
+        for every other optional field."""
+        created = client.post(
+            "/prompts", json={**sample_prompt_data, "tags": ["a"]}
+        ).json()
+
+        response = client.put(
+            f"/prompts/{created['id']}",
+            json={"title": created["title"], "content": created["content"]},
+        )
+        assert response.status_code == 200
+        assert response.json()["tags"] == []
+
+    def test_list_prompts_filter_by_tags_is_or_not_and(
+        self, client: TestClient
+    ):
+        """Filtering by multiple tags must return prompts carrying *any*
+        of them, not only prompts carrying all of them (tagging-system.md
+        Error Conditions - "Tag filter is OR, not AND")."""
+        p1 = client.post(
+            "/prompts",
+            json={"title": "P1", "content": "Content one here", "tags": ["marketing"]},
+        ).json()
+        p2 = client.post(
+            "/prompts",
+            json={"title": "P2", "content": "Content two here", "tags": ["needs-review"]},
+        ).json()
+        client.post(
+            "/prompts", json={"title": "P3", "content": "Content three here", "tags": ["other"]}
+        )
+
+        response = client.get("/prompts?tags=marketing,needs-review")
+        assert response.status_code == 200
+        ids = {p["id"] for p in response.json()["prompts"]}
+        assert ids == {p1["id"], p2["id"]}
+
+    def test_list_prompts_filter_by_tags_no_match_returns_empty_not_error(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """A tags filter matching no tag must return 200 with an empty
+        list and total 0, consistent with the existing search parameter's
+        no-match behavior."""
+        client.post("/prompts", json=sample_prompt_data)
+
+        response = client.get("/prompts?tags=nonexistent-tag")
+        assert response.status_code == 200
+        assert response.json() == {"prompts": [], "total": 0}
+
+    def test_list_tags_returns_prompt_counts(self, client: TestClient):
+        """GET /tags must report each tag's prompt_count as a computed
+        value reflecting how many prompts currently carry it."""
+        client.post(
+            "/prompts",
+            json={"title": "P1", "content": "Content one here", "tags": ["shared"]},
+        )
+        client.post(
+            "/prompts",
+            json={"title": "P2", "content": "Content two here", "tags": ["shared"]},
+        )
+
+        tags = {t["name"]: t["prompt_count"] for t in client.get("/tags").json()["tags"]}
+        assert tags["shared"] == 2
+
+    def test_create_tag_explicitly(self, client: TestClient):
+        """POST /tags must create a tag directly, independent of any
+        prompt."""
+        response = client.post("/tags", json={"name": "needs-review"})
+        assert response.status_code == 201
+        assert response.json()["name"] == "needs-review"
+        assert response.json()["prompt_count"] == 0
+
+    def test_create_tag_explicit_duplicate_returns_409(self, client: TestClient):
+        """Unlike the implicit get-or-create used when tagging a prompt,
+        POST /tags with a name that already exists (case-insensitively)
+        must be rejected with 409, not silently reused."""
+        client.post("/tags", json={"name": "Marketing"})
+        response = client.post("/tags", json={"name": "marketing"})
+        assert response.status_code == 409
+
+    def test_create_tag_empty_name_after_trim_returns_422(self, client: TestClient):
+        """A name that is empty or whitespace-only after trimming must be
+        rejected with 422."""
+        response = client.post("/tags", json={"name": "   "})
+        assert response.status_code == 422
+
+    def test_create_tag_name_exceeding_max_length_returns_422(self, client: TestClient):
+        """name has a 50-character limit after trimming - a 51-character
+        name must be rejected with 422."""
+        response = client.post("/tags", json={"name": "x" * 51})
+        assert response.status_code == 422
+
+    def test_prompt_tag_name_empty_after_trim_returns_422(
+        self, client: TestClient, sample_prompt_data
+    ):
+        """The same empty-after-trim rejection applies to tag names
+        supplied on a prompt create/update/patch, not just POST /tags."""
+        response = client.post(
+            "/prompts", json={**sample_prompt_data, "tags": ["  "]}
+        )
+        assert response.status_code == 422
+
+    def test_rename_tag_updates_every_prompt_that_carries_it(
+        self, client: TestClient
+    ):
+        """Renaming a tag applied to multiple prompts must update every
+        prompt's displayed tag name, since the link is to the Tag record
+        itself, not a copy of its name."""
+        p1 = client.post(
+            "/prompts",
+            json={"title": "P1", "content": "Content one here", "tags": ["draft"]},
+        ).json()
+        p2 = client.post(
+            "/prompts",
+            json={"title": "P2", "content": "Content two here", "tags": ["draft"]},
+        ).json()
+        tag_id = p1["tags"][0]["id"]
+
+        response = client.patch(f"/tags/{tag_id}", json={"name": "final"})
+        assert response.status_code == 200
+        assert response.json()["name"] == "final"
+
+        for prompt_id in (p1["id"], p2["id"]):
+            names = {t["name"] for t in client.get(f"/prompts/{prompt_id}").json()["tags"]}
+            assert names == {"final"}
+
+    def test_rename_tag_collision_with_different_tag_returns_409(
+        self, client: TestClient
+    ):
+        """Renaming a tag to a name already held by a *different* tag
+        must be rejected with 409, not silently merged."""
+        client.post("/tags", json={"name": "alpha"})
+        beta = client.post("/tags", json={"name": "beta"}).json()
+
+        response = client.patch(f"/tags/{beta['id']}", json={"name": "alpha"})
+        assert response.status_code == 409
+
+    def test_rename_tag_case_only_change_of_its_own_name_succeeds(
+        self, client: TestClient
+    ):
+        """Renaming a tag to a case-only variant of its own current name
+        must succeed, not be treated as a collision with itself."""
+        tag = client.post("/tags", json={"name": "marketing"}).json()
+
+        response = client.patch(f"/tags/{tag['id']}", json={"name": "Marketing"})
+        assert response.status_code == 200
+        assert response.json()["name"] == "Marketing"
+
+    def test_rename_nonexistent_tag_returns_404(self, client: TestClient):
+        """PATCH /tags/{id} for an id that doesn't exist must return 404."""
+        response = client.patch("/tags/does-not-exist", json={"name": "x"})
+        assert response.status_code == 404
+
+    def test_delete_tag_unlinks_from_prompts_without_deleting_them(
+        self, client: TestClient
+    ):
+        """Deleting a tag must remove it from every prompt that carried
+        it; those prompts, their other fields, and their other tags must
+        be otherwise unchanged (tagging-system.md User Story 3,
+        Acceptance Scenario 3)."""
+        created = client.post(
+            "/prompts",
+            json={**{"title": "P1", "content": "Content one here"}, "tags": ["keep", "remove"]},
+        ).json()
+        tag_to_delete = next(t for t in created["tags"] if t["name"] == "remove")["id"]
+
+        response = client.delete(f"/tags/{tag_to_delete}")
+        assert response.status_code == 204
+
+        prompt = client.get(f"/prompts/{created['id']}").json()
+        assert {t["name"] for t in prompt["tags"]} == {"keep"}
+        assert prompt["title"] == created["title"]
+        assert prompt["content"] == created["content"]
+
+        assert client.get("/tags/" + tag_to_delete).status_code == 404
+
+    def test_delete_nonexistent_tag_returns_404(self, client: TestClient):
+        """DELETE /tags/{id} for an id that doesn't exist must return
+        404."""
+        response = client.delete("/tags/does-not-exist")
+        assert response.status_code == 404
+
+    def test_delete_prompt_unlinks_tags_without_deleting_the_tags(
+        self, client: TestClient
+    ):
+        """Deleting a prompt must remove its tag links without deleting
+        the Tag records - other prompts (or future prompts) can still use
+        them (tagging-system.md User Story 3, Acceptance Scenario 4)."""
+        p1 = client.post(
+            "/prompts",
+            json={"title": "P1", "content": "Content one here", "tags": ["shared"]},
+        ).json()
+        p2 = client.post(
+            "/prompts",
+            json={"title": "P2", "content": "Content two here", "tags": ["shared"]},
+        ).json()
+
+        response = client.delete(f"/prompts/{p1['id']}")
+        assert response.status_code == 204
+
+        tags = client.get("/tags").json()["tags"]
+        assert any(t["name"] == "shared" for t in tags)
+
+        remaining = client.get(f"/prompts/{p2['id']}").json()
+        assert {t["name"] for t in remaining["tags"]} == {"shared"}
+
+    def test_get_tag_returns_404_for_missing_id(self, client: TestClient):
+        """GET /tags/{id} for an id that doesn't exist must return 404."""
+        response = client.get("/tags/does-not-exist")
+        assert response.status_code == 404

@@ -4,9 +4,9 @@ This module provides simple in-memory storage for prompts and collections.
 In a production environment, this would be replaced with a database.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
-from app.models import Collection, Prompt, PromptVersion
+from app.models import Collection, Prompt, PromptVersion, Tag
 
 
 class Storage:
@@ -23,6 +23,9 @@ class Storage:
             id.
         _versions (Dict[str, PromptVersion]): Prompt versions keyed by
             their id.
+        _tags (Dict[str, Tag]): Tags keyed by their id.
+        _prompt_tags (Dict[str, Set[str]]): Tag id sets keyed by prompt
+            id, representing the Prompt<->Tag many-to-many relationship.
 
     Example:
         >>> storage = Storage()
@@ -32,7 +35,7 @@ class Storage:
 
     def __init__(self):
         """Initialize empty in-memory stores for prompts, collections,
-        and prompt versions.
+        prompt versions, and tags.
 
         Returns:
             None
@@ -45,6 +48,8 @@ class Storage:
         self._prompts: Dict[str, Prompt] = {}
         self._collections: Dict[str, Collection] = {}
         self._versions: Dict[str, PromptVersion] = {}
+        self._tags: Dict[str, Tag] = {}
+        self._prompt_tags: Dict[str, Set[str]] = {}
     
     # ============== Prompt Operations ==============
     
@@ -348,13 +353,221 @@ class Storage:
         for version in self.get_versions_by_prompt(prompt_id):
             self.delete_version(version.id)
 
+    # ============== Tag Operations ==============
+
+    def create_tag(self, name: str) -> Tag:
+        """Store a new tag.
+
+        Args:
+            name (str): The new tag's name. Not checked for a
+                case-insensitive collision here - callers that need that
+                (explicit tag creation) must check via
+                get_tag_by_name_case_insensitive first.
+
+        Returns:
+            Tag: The newly created tag, with prompt_count 0.
+
+        Example:
+            >>> storage = Storage()
+            >>> storage.create_tag("marketing")
+            Tag(id='...', name='marketing', prompt_count=0, ...)
+        """
+        tag = Tag(name=name)
+        self._tags[tag.id] = tag
+        return tag
+
+    def get_tag(self, tag_id: str) -> Optional[Tag]:
+        """Retrieve a single tag by its id, with its current prompt_count.
+
+        Args:
+            tag_id (str): The unique identifier of the tag to retrieve.
+
+        Returns:
+            Optional[Tag]: The matching tag, or None if no tag with
+                tag_id exists.
+
+        Example:
+            >>> storage = Storage()
+            >>> storage.get_tag("missing-id")
+        """
+        tag = self._tags.get(tag_id)
+        if tag is None:
+            return None
+        return self._tag_with_count(tag)
+
+    def get_tag_by_name_case_insensitive(self, name: str) -> Optional[Tag]:
+        """Retrieve a tag whose name matches name, ignoring case.
+
+        Args:
+            name (str): The tag name to match case-insensitively.
+
+        Returns:
+            Optional[Tag]: The matching tag, or None if no tag with that
+                name (in any capitalization) exists.
+
+        Example:
+            >>> storage = Storage()
+            >>> storage.create_tag("Marketing")
+            >>> storage.get_tag_by_name_case_insensitive("marketing")
+            Tag(name='Marketing', ...)
+        """
+        lowered = name.lower()
+        for tag in self._tags.values():
+            if tag.name.lower() == lowered:
+                return tag
+        return None
+
+    def get_all_tags_with_counts(self) -> List[Tag]:
+        """Retrieve every tag currently in use, each with its prompt_count.
+
+        Returns:
+            List[Tag]: Every stored tag, in no particular order.
+
+        Example:
+            >>> storage = Storage()
+            >>> storage.get_all_tags_with_counts()
+            []
+        """
+        return [self._tag_with_count(tag) for tag in self._tags.values()]
+
+    def rename_tag(self, tag_id: str, new_name: str) -> Optional[Tag]:
+        """Rename an existing tag.
+
+        Does not check for a name collision - callers that need that
+        must check via get_tag_by_name_case_insensitive first.
+
+        Args:
+            tag_id (str): The unique identifier of the tag to rename.
+            new_name (str): The tag's new name.
+
+        Returns:
+            Optional[Tag]: The renamed tag with its current prompt_count,
+                or None if no tag with tag_id exists.
+
+        Example:
+            >>> storage = Storage()
+            >>> tag = storage.create_tag("markting")
+            >>> storage.rename_tag(tag.id, "marketing")
+            Tag(name='marketing', ...)
+        """
+        tag = self._tags.get(tag_id)
+        if tag is None:
+            return None
+        renamed = tag.model_copy(update={"name": new_name})
+        self._tags[tag_id] = renamed
+        return self._tag_with_count(renamed)
+
+    def delete_tag(self, tag_id: str) -> bool:
+        """Delete a tag by its id, unlinking it from every prompt that
+        carried it (without deleting those prompts).
+
+        Args:
+            tag_id (str): The unique identifier of the tag to delete.
+
+        Returns:
+            bool: True if the tag was found and deleted, False if no tag
+                with tag_id exists.
+
+        Example:
+            >>> storage = Storage()
+            >>> storage.delete_tag("missing-id")
+            False
+        """
+        if tag_id not in self._tags:
+            return False
+        del self._tags[tag_id]
+        for tag_ids in self._prompt_tags.values():
+            tag_ids.discard(tag_id)
+        return True
+
+    def get_prompt_tags(self, prompt_id: str) -> List[Tag]:
+        """Retrieve the tags currently attached to a prompt.
+
+        Args:
+            prompt_id (str): The unique identifier of the prompt whose
+                tags should be retrieved.
+
+        Returns:
+            List[Tag]: The prompt's attached tags, each with its current
+                prompt_count, in no particular order.
+
+        Example:
+            >>> storage = Storage()
+            >>> storage.get_prompt_tags("missing-id")
+            []
+        """
+        tag_ids = self._prompt_tags.get(prompt_id, set())
+        return [self._tag_with_count(self._tags[tid]) for tid in tag_ids if tid in self._tags]
+
+    def set_prompt_tags(self, prompt_id: str, tag_names: List[str]) -> List[Tag]:
+        """Set a prompt's complete tag set, resolving each name via
+        case-insensitive get-or-create.
+
+        Replaces the prompt's entire previous tag set - names left off
+        tag_names are detached, matching tags is a full-replace list.
+        Duplicate names (including case-only duplicates) resolve to the
+        same tag and are deduplicated automatically.
+
+        Args:
+            prompt_id (str): The unique identifier of the prompt whose
+                tags should be set.
+            tag_names (List[str]): The prompt's complete new set of tag
+                names. An empty list clears all of the prompt's tags.
+
+        Returns:
+            List[Tag]: The prompt's tags after the update.
+
+        Example:
+            >>> storage = Storage()
+            >>> storage.set_prompt_tags("prompt-1", ["marketing", "draft"])
+            [Tag(name='marketing', ...), Tag(name='draft', ...)]
+        """
+        tag_ids: Set[str] = set()
+        for name in tag_names:
+            existing = self.get_tag_by_name_case_insensitive(name)
+            tag_ids.add(existing.id if existing else self.create_tag(name).id)
+        self._prompt_tags[prompt_id] = tag_ids
+        return self.get_prompt_tags(prompt_id)
+
+    def remove_prompt_tag_links(self, prompt_id: str) -> None:
+        """Remove all of a prompt's tag links, without deleting the Tag
+        records themselves (used when the prompt itself is deleted).
+
+        Args:
+            prompt_id (str): The unique identifier of the prompt whose
+                tag links should be removed.
+
+        Returns:
+            None
+
+        Example:
+            >>> storage = Storage()
+            >>> storage.remove_prompt_tag_links("missing-id")
+        """
+        self._prompt_tags.pop(prompt_id, None)
+
+    def _tag_with_count(self, tag: Tag) -> Tag:
+        """Return a copy of tag with prompt_count set to how many prompts
+        currently carry it.
+
+        Args:
+            tag (Tag): The tag to compute the current prompt_count for.
+
+        Returns:
+            Tag: A copy of tag with prompt_count populated.
+        """
+        count = sum(1 for tag_ids in self._prompt_tags.values() if tag.id in tag_ids)
+        return tag.model_copy(update={"prompt_count": count})
+
     # ============== Utility ==============
 
     def clear(self):
-        """Remove all stored prompts, collections, and prompt versions.
+        """Remove all stored prompts, collections, prompt versions, and
+        tags.
 
         Resets the in-memory storage to an empty state, discarding all
-        prompts, collections, and prompt versions that have been created.
+        prompts, collections, prompt versions, and tags that have been
+        created.
 
         Returns:
             None
@@ -369,6 +582,8 @@ class Storage:
         self._prompts.clear()
         self._collections.clear()
         self._versions.clear()
+        self._tags.clear()
+        self._prompt_tags.clear()
 
 
 # Global storage instance

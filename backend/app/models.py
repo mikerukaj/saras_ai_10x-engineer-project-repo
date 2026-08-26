@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def generate_id() -> str:
@@ -35,6 +35,116 @@ def get_current_time() -> datetime:
     return datetime.utcnow()
 
 
+def _validate_tag_names(names: Optional[List[str]]) -> Optional[List[str]]:
+    """Trim and validate each tag name in a list of tag names supplied on
+    a prompt create/update/patch (as distinct from the standalone Tag
+    entity's own name validation on TagBase).
+
+    Args:
+        names (Optional[List[str]]): The raw tag name strings to validate,
+            or None if no tags were supplied.
+
+    Returns:
+        Optional[List[str]]: The trimmed tag names, or None if names was
+            None.
+
+    Raises:
+        ValueError: If any name is empty after trimming, or exceeds 50
+            characters after trimming.
+    """
+    if names is None:
+        return None
+    validated = []
+    for name in names:
+        stripped = name.strip()
+        if not stripped:
+            raise ValueError("tag names must not be empty or whitespace-only")
+        if len(stripped) > 50:
+            raise ValueError("tag names must be at most 50 characters")
+        validated.append(stripped)
+    return validated
+
+
+# ============== Tag Models ==============
+
+class TagBase(BaseModel):
+    """Base schema holding the field shared by tag models.
+
+    Attributes:
+        name (str): The tag's name, 1-50 characters after trimming
+            surrounding whitespace, unique case-insensitively.
+
+    Example:
+        >>> base = TagBase(name="marketing")
+        >>> base.name
+        'marketing'
+    """
+
+    name: str = Field(...)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Trim name and reject it if empty or too long after trimming."""
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name must not be empty or whitespace-only")
+        if len(stripped) > 50:
+            raise ValueError("name must be at most 50 characters")
+        return stripped
+
+
+class TagCreate(TagBase):
+    pass
+
+
+class TagRename(TagBase):
+    pass
+
+
+class Tag(TagBase):
+    """Full tag schema, including server-generated fields.
+
+    Attributes:
+        name (str): The tag's name, 1-50 characters after trimming.
+        id (str): The tag's unique identifier, generated automatically.
+        created_at (datetime): The UTC timestamp when the tag was
+            created, set automatically.
+        prompt_count (int): The number of prompts currently carrying this
+            tag. Computed, not stored - populated wherever tags are
+            listed.
+
+    Example:
+        >>> tag = Tag(name="marketing")
+        >>> tag.prompt_count
+        0
+    """
+
+    id: str = Field(default_factory=generate_id)
+    created_at: datetime = Field(default_factory=get_current_time)
+    prompt_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class TagList(BaseModel):
+    """Response schema for the full list of tags in use.
+
+    Attributes:
+        tags (List[Tag]): Every tag currently in use.
+        total (int): The total number of tags.
+
+    Example:
+        >>> result = TagList(tags=[], total=0)
+        >>> result.total
+        0
+    """
+
+    tags: List[Tag]
+    total: int
+
+
 # ============== Prompt Models ==============
 
 class PromptBase(BaseModel):
@@ -61,11 +171,38 @@ class PromptBase(BaseModel):
 
 
 class PromptCreate(PromptBase):
-    pass
+    """Extends PromptBase with an optional list of tag names to attach.
+
+    Attributes:
+        tags (Optional[List[str]]): Tag names to attach to the new
+            prompt, resolved via case-insensitive get-or-create. Omitting
+            this field means the prompt is created with no tags.
+    """
+
+    tags: Optional[List[str]] = None
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        return _validate_tag_names(v)
 
 
 class PromptUpdate(PromptBase):
-    pass
+    """Extends PromptBase with an optional list of tag names, full-replace.
+
+    Attributes:
+        tags (Optional[List[str]]): The prompt's complete tag set after
+            this update, resolved via case-insensitive get-or-create.
+            Omitting this field means the prompt ends up with no tags
+            (full replace, matching the rest of PUT's semantics).
+    """
+
+    tags: Optional[List[str]] = None
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        return _validate_tag_names(v)
 
 
 class PromptPatch(BaseModel):
@@ -80,6 +217,10 @@ class PromptPatch(BaseModel):
             500 characters, if being updated.
         collection_id (Optional[str]): The identifier of the collection
             to move this prompt into, if being updated.
+        tags (Optional[List[str]]): The prompt's complete tag set after
+            this patch, resolved via case-insensitive get-or-create.
+            Omitting this field entirely leaves the prompt's tags
+            unchanged; including it (even as []) fully replaces them.
 
     Example:
         >>> patch = PromptPatch(title="Updated Title")
@@ -91,6 +232,12 @@ class PromptPatch(BaseModel):
     content: Optional[str] = Field(None, min_length=1)
     description: Optional[str] = Field(None, max_length=500)
     collection_id: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        return _validate_tag_names(v)
 
 
 class Prompt(PromptBase):
@@ -108,6 +255,8 @@ class Prompt(PromptBase):
             created, set automatically.
         updated_at (datetime): The UTC timestamp when the prompt was last
             updated, set automatically.
+        tags (List[Tag]): The prompt's currently-attached tags, embedded
+            in full. Defaults to an empty list.
 
     Example:
         >>> prompt = Prompt(title="Greeting", content="Hello, world!")
@@ -118,6 +267,7 @@ class Prompt(PromptBase):
     id: str = Field(default_factory=generate_id)
     created_at: datetime = Field(default_factory=get_current_time)
     updated_at: datetime = Field(default_factory=get_current_time)
+    tags: List[Tag] = Field(default_factory=list)
 
     class Config:
         """Pydantic configuration for the Prompt model.
