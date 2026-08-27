@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { Tag } from '../../api/client'
 import { Button } from '../Button'
 import { Card } from '../Card'
+import { FieldError } from '../FieldError'
 
 interface TagListItemProps {
   tag: Tag
@@ -17,37 +18,70 @@ interface TagListItemProps {
 export function TagListItem({ tag, renaming = false, onRename, onDelete }: TagListItemProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(tag.name)
+  const [editError, setEditError] = useState<string>()
 
+  function handleDraftChange(value: string) {
+    setDraft(value)
+    if (editError) setEditError(undefined)
+  }
+
+  // Enter is an explicit "commit this" signal, so an empty name here
+  // blocks the commit and shows why, rather than silently discarding it -
+  // mirrors backend/app/models.py's tag-name validator (non-empty after
+  // trim, max 50 chars, already enforced by maxLength below).
   function commitRename() {
+    const trimmed = draft.trim()
+    if (!trimmed) {
+      setEditError('Tag name is required.')
+      return
+    }
     setEditing(false)
-    if (draft.trim() && draft.trim() !== tag.name) onRename(draft.trim())
-    else setDraft(tag.name)
+    setEditError(undefined)
+    if (trimmed !== tag.name) onRename(trimmed)
   }
 
   function cancelRename() {
-    // Reset the draft first so the onBlur this triggers (via the input
-    // unmounting) sees draft === tag.name and no-ops instead of
-    // re-committing whatever was typed.
     setDraft(tag.name)
     setEditing(false)
+    setEditError(undefined)
+  }
+
+  // Blur is an incidental signal (clicking elsewhere), unlike Enter's
+  // explicit commit - an empty draft here just cancels the edit instead of
+  // trapping the user in the field with an error they didn't ask to see.
+  function handleBlur() {
+    if (!draft.trim()) {
+      cancelRename()
+      return
+    }
+    commitRename()
   }
 
   return (
     <Card className="flex items-center justify-between gap-3">
       {editing ? (
-        <input
-          autoFocus
-          type="text"
-          value={draft}
-          maxLength={50}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commitRename}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') commitRename()
-            else if (event.key === 'Escape') cancelRename()
-          }}
-          className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
-        />
+        <div className="min-w-0">
+          <input
+            autoFocus
+            type="text"
+            value={draft}
+            maxLength={50}
+            onChange={(event) => handleDraftChange(event.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') commitRename()
+              else if (event.key === 'Escape') cancelRename()
+            }}
+            aria-invalid={Boolean(editError)}
+            aria-describedby={editError ? `tag-${tag.id}-rename-error` : undefined}
+            className={`w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 ${
+              editError
+                ? 'border-red-400 focus:border-red-500 focus-visible:outline-red-600'
+                : 'border-slate-300 focus:border-blue-500 focus-visible:outline-blue-600'
+            }`}
+          />
+          <FieldError id={`tag-${tag.id}-rename-error`} message={editError} />
+        </div>
       ) : (
         <button
           type="button"
