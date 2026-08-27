@@ -9,8 +9,8 @@ interface TagBadgeProps {
  * PromptDetailPage. */
 export function TagBadge({ tag, onRemove }: TagBadgeProps) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-      {tag.name}
+    <span className="inline-flex max-w-[10rem] items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+      <span className="truncate">{tag.name}</span>
       {onRemove && (
         <button
           type="button"

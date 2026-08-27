@@ -13,7 +13,7 @@ export function Page({ title, actions, children }: PageProps) {
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">{title}</h1>
+        <h1 className="min-w-0 break-words text-xl font-semibold text-slate-900 sm:text-2xl">{title}</h1>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
       {children}

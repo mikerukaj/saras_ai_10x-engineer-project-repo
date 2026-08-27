@@ -47,9 +47,9 @@ export function TagInput({ value, onChange, suggestions }: TagInputProps) {
         {value.map((name) => (
           <span
             key={name}
-            className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+            className="inline-flex max-w-[10rem] items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
           >
-            {name}
+            <span className="truncate">{name}</span>
             <button
               type="button"
               onClick={() => removeTag(name)}
@@ -77,7 +77,7 @@ export function TagInput({ value, onChange, suggestions }: TagInputProps) {
               <button
                 type="button"
                 onClick={() => addTag(tag.name)}
-                className="block w-full px-3 py-1.5 text-left hover:bg-slate-50"
+                className="block w-full break-words px-3 py-1.5 text-left hover:bg-slate-50"
               >
                 {tag.name}
               </button>

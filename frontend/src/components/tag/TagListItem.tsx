@@ -38,8 +38,13 @@ export function TagListItem({ tag, renaming = false, onRename, onDelete }: TagLi
           className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
         />
       ) : (
-        <button type="button" onClick={() => setEditing(true)} disabled={renaming} className="text-left">
-          <span className="text-sm font-semibold text-slate-900">{tag.name}</span>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          disabled={renaming}
+          className="min-w-0 text-left"
+        >
+          <span className="break-words text-sm font-semibold text-slate-900">{tag.name}</span>
           <span className="ml-2 text-xs text-slate-500">{tag.prompt_count} prompt(s)</span>
           {renaming && (
             <span
@@ -49,7 +54,7 @@ export function TagListItem({ tag, renaming = false, onRename, onDelete }: TagLi
           )}
         </button>
       )}
-      <Button variant="danger" onClick={onDelete} disabled={renaming}>
+      <Button variant="danger" onClick={onDelete} disabled={renaming} className="shrink-0">
         Delete
       </Button>
     </Card>

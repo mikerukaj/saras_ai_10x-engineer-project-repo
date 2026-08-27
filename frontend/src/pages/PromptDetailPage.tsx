@@ -52,7 +52,7 @@ export function PromptDetailPage() {
       {deletePrompt.error && <ErrorMessageFromError error={deletePrompt.error} />}
 
       <Card>
-        {prompt.description && <p className="mb-3 text-sm text-slate-600">{prompt.description}</p>}
+        {prompt.description && <p className="mb-3 break-words text-sm text-slate-600">{prompt.description}</p>}
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
           <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
             {prompt.collection_id ? 'In a collection' : 'No collection'}

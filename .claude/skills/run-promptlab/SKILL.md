@@ -123,6 +123,7 @@ To end the session: `tmux send-keys -t promptlab 'quit' Enter` then
 | command | what it does |
 |---|---|
 | `launch` | launch headless Chromium, start a new page, start collecting console errors |
+| `viewport <width> <height>` | resize the page's viewport (e.g. `viewport 375 667` for mobile-width checks) |
 | `nav <url>` | navigate, waits for network-idle |
 | `wait-for <selector>` | Playwright selector (`text=Foo`, `#id`, `button:has-text("Foo")`, plain CSS, …), 10s timeout |
 | `click <selector>` | click, 10s timeout |
@@ -198,6 +199,22 @@ frontend checks that currently exist.
   Vite server it spawns. Stop by port
   (`lsof -ti:5173 -sTCP:LISTEN | xargs -r kill`), not by PID or
   `pkill -f` (too broad — can match the agent's own command line).
+- **Checking for mobile horizontal overflow needs real data, not just
+  CSS reading.** `viewport 375 667` (or `320 568` for the narrowest
+  common width) plus
+  `eval ({scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth})`
+  catches real overflow that reading Tailwind classes won't — e.g. a
+  user-entered title/tag/collection name with no spaces at all
+  defeats normal word-wrapping (`overflow-wrap: normal` doesn't break
+  within a word) and pushes the whole page wider than the viewport.
+  Seed a prompt/tag/collection with one long unbroken "word" via
+  `curl` first (real UI typing is slow and the failure only shows up
+  with pathological input) and check every page, not just the one
+  you changed. When `scrollWidth > innerWidth`, find the specific
+  offending element (not just confirm the page overflows) with:
+  `eval (() => { const offenders = []; for (const el of document.querySelectorAll('body *')) { const r = el.getBoundingClientRect(); if (r.right > innerWidth + 1 && el.children.length === 0) offenders.push({tag: el.tagName, cls: el.className, right: Math.round(r.right)}); } return offenders; })()`
+  — `document.documentElement.scrollWidth` alone only tells you *that*
+  something overflows, not *what*.
 
 ## Troubleshooting
 

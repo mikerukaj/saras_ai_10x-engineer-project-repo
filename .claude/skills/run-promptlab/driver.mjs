@@ -43,6 +43,14 @@ const COMMANDS = {
     console.log('launched')
   },
 
+  async viewport(rest) {
+    if (!page) return console.log('ERROR: launch first')
+    const [width, height] = rest.split(' ').map(Number)
+    if (!width || !height) return console.log('ERROR: usage: viewport <width> <height>')
+    await page.setViewportSize({ width, height })
+    console.log('viewport ->', width, height)
+  },
+
   async nav(url) {
     if (!page) return console.log('ERROR: launch first')
     await page.goto(url, { waitUntil: 'networkidle' })

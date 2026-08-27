@@ -59,7 +59,7 @@ export function PromptFilters({ collections, tags, value, onChange }: PromptFilt
                 key={tag.id}
                 type="button"
                 onClick={() => toggleTag(tag.name)}
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                className={`max-w-[10rem] truncate rounded-full px-2 py-0.5 text-xs font-medium ${
                   active ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >

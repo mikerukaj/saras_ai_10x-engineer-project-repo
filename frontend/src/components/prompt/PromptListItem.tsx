@@ -19,11 +19,11 @@ export function PromptListItem({ prompt, collectionName }: PromptListItemProps) 
   return (
     <Card>
       <Link to={`/prompts/${prompt.id}`} className="block">
-        <h2 className="text-sm font-semibold text-slate-900 hover:underline">{prompt.title}</h2>
-        {prompt.description && <p className="mt-1 text-sm text-slate-600">{prompt.description}</p>}
+        <h2 className="break-words text-sm font-semibold text-slate-900 hover:underline">{prompt.title}</h2>
+        {prompt.description && <p className="mt-1 break-words text-sm text-slate-600">{prompt.description}</p>}
       </Link>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+        <span className="max-w-[12rem] truncate rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
           {collectionName ?? 'No collection'}
         </span>
         {prompt.tags.map((tag) => (

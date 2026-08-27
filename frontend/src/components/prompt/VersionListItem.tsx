@@ -12,13 +12,13 @@ export function VersionListItem({ version, onView }: VersionListItemProps) {
       <button
         type="button"
         onClick={onView}
-        className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50"
+        className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50"
       >
-        <span className="font-medium text-slate-800">
+        <span className="min-w-0 break-words font-medium text-slate-800">
           Version {version.version_number}
           {version.label && <span className="ml-2 font-normal text-slate-500">— {version.label}</span>}
         </span>
-        <time className="text-xs text-slate-400" dateTime={version.created_at}>
+        <time className="shrink-0 text-xs text-slate-400" dateTime={version.created_at}>
           {new Date(version.created_at).toLocaleString()}
         </time>
       </button>
