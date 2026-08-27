@@ -67,7 +67,7 @@ export function VersionHistoryPanel({ promptId }: VersionHistoryPanelProps) {
           onChange={(event) => setCheckpointLabel(event.target.value)}
           placeholder="Checkpoint label (optional)"
           maxLength={100}
-          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
         />
         <Button variant="secondary" onClick={handleSaveCheckpoint} loading={createVersion.isPending}>
           Save checkpoint

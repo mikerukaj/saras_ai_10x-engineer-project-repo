@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
   variant?: 'primary' | 'secondary' | 'danger'
@@ -13,18 +13,17 @@ const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
   danger: 'bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-600',
 }
 
-/** Shared button primitive with consistent variants (FR-025). */
-export function Button({
-  variant = 'primary',
-  loading = false,
-  disabled,
-  type = 'button',
-  className = '',
-  children,
-  ...rest
-}: ButtonProps) {
+/** Shared button primitive with consistent variants (FR-025). Forwards its
+ * ref (rather than being a plain function component) so callers like
+ * ConfirmDialog can programmatically focus a specific button - e.g. moving
+ * focus into a modal when it opens. */
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = 'primary', loading = false, disabled, type = 'button', className = '', children, ...rest },
+  ref,
+) {
   return (
     <button
+      ref={ref}
       type={type}
       disabled={disabled || loading}
       className={`inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${variantClasses[variant]} ${className}`}
@@ -39,4 +38,4 @@ export function Button({
       {children}
     </button>
   )
-}
+})

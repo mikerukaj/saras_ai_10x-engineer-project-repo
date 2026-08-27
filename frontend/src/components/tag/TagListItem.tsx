@@ -24,6 +24,14 @@ export function TagListItem({ tag, renaming = false, onRename, onDelete }: TagLi
     else setDraft(tag.name)
   }
 
+  function cancelRename() {
+    // Reset the draft first so the onBlur this triggers (via the input
+    // unmounting) sees draft === tag.name and no-ops instead of
+    // re-committing whatever was typed.
+    setDraft(tag.name)
+    setEditing(false)
+  }
+
   return (
     <Card className="flex items-center justify-between gap-3">
       {editing ? (
@@ -34,8 +42,11 @@ export function TagListItem({ tag, renaming = false, onRename, onDelete }: TagLi
           maxLength={50}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commitRename}
-          onKeyDown={(event) => event.key === 'Enter' && commitRename()}
-          className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commitRename()
+            else if (event.key === 'Escape') cancelRename()
+          }}
+          className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
         />
       ) : (
         <button

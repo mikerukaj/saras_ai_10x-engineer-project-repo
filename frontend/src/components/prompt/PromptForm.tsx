@@ -53,7 +53,7 @@ export function PromptForm({ initialValue, submitLabel, onSubmit, submitting }: 
           maxLength={200}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
         />
       </div>
 
@@ -69,7 +69,7 @@ export function PromptForm({ initialValue, submitLabel, onSubmit, submitting }: 
           value={content}
           onChange={(event) => setContent(event.target.value)}
           placeholder="Use {{variable}} for placeholders"
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:outline-none"
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
         />
       </div>
 
@@ -83,7 +83,7 @@ export function PromptForm({ initialValue, submitLabel, onSubmit, submitting }: 
           maxLength={500}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
         />
       </div>
 

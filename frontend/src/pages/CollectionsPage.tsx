@@ -44,7 +44,7 @@ export function CollectionsPage() {
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Collection name"
-          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
         />
         <input
           type="text"
@@ -52,7 +52,7 @@ export function CollectionsPage() {
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           placeholder="Description (optional)"
-          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
         />
         <Button type="submit" loading={createCollection.isPending}>
           Create

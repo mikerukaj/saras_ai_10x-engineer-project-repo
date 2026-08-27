@@ -33,14 +33,14 @@ export function PromptFilters({ collections, tags, value, onChange }: PromptFilt
         onChange={(event) => onChange({ ...value, search: event.target.value })}
         placeholder="Search prompts…"
         aria-label="Search prompts"
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none sm:max-w-xs"
+        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 sm:max-w-xs"
       />
 
       <select
         value={value.collectionId ?? ''}
         onChange={(event) => onChange({ ...value, collectionId: event.target.value || undefined })}
         aria-label="Filter by collection"
-        className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+        className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600"
       >
         <option value="">All collections</option>
         {collections.map((collection) => (
