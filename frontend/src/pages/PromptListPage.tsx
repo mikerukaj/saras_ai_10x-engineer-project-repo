@@ -30,8 +30,8 @@ export function PromptListPage() {
     setSearchParams(params)
   }
 
-  const { data: collections = [] } = useCollections()
-  const { data: allTags = [] } = useTags()
+  const { data: collections = [], error: collectionsError } = useCollections()
+  const { data: allTags = [], error: tagsError } = useTags()
   const {
     data: prompts,
     isLoading,
@@ -57,6 +57,9 @@ export function PromptListPage() {
         </Link>
       }
     >
+      {collectionsError && <ErrorMessageFromError error={collectionsError} />}
+      {tagsError && <ErrorMessageFromError error={tagsError} />}
+
       <PromptFilters
         collections={collections}
         tags={allTags}

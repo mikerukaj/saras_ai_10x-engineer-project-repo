@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { useCollections, useTags } from '../../api/hooks'
 import type { PromptCreate } from '../../api/client'
 import { Button } from '../Button'
+import { ErrorMessageFromError } from '../ErrorMessage'
 import { TagInput } from '../tag/TagInput'
 import { CollectionSelect } from './CollectionSelect'
 
@@ -24,8 +25,8 @@ export function PromptForm({ initialValue, submitLabel, onSubmit, submitting }: 
   const [collectionId, setCollectionId] = useState<string | null>(initialValue?.collection_id ?? null)
   const [tags, setTags] = useState<string[]>(initialValue?.tags ?? [])
 
-  const { data: collections = [] } = useCollections()
-  const { data: allTags = [] } = useTags()
+  const { data: collections = [], error: collectionsError } = useCollections()
+  const { data: allTags = [], error: tagsError } = useTags()
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -88,16 +89,28 @@ export function PromptForm({ initialValue, submitLabel, onSubmit, submitting }: 
 
       <div>
         <label className="block text-sm font-medium text-slate-700">Collection</label>
-        <div className="mt-1">
-          <CollectionSelect collections={collections} value={collectionId} onChange={setCollectionId} />
-        </div>
+        {collectionsError ? (
+          <div className="mt-1">
+            <ErrorMessageFromError error={collectionsError} />
+          </div>
+        ) : (
+          <div className="mt-1">
+            <CollectionSelect collections={collections} value={collectionId} onChange={setCollectionId} />
+          </div>
+        )}
       </div>
 
       <div>
         <label className="block text-sm font-medium text-slate-700">Tags</label>
-        <div className="mt-1">
-          <TagInput value={tags} onChange={setTags} suggestions={allTags} />
-        </div>
+        {tagsError ? (
+          <div className="mt-1">
+            <ErrorMessageFromError error={tagsError} />
+          </div>
+        ) : (
+          <div className="mt-1">
+            <TagInput value={tags} onChange={setTags} suggestions={allTags} />
+          </div>
+        )}
       </div>
 
       <Button type="submit" loading={submitting}>
