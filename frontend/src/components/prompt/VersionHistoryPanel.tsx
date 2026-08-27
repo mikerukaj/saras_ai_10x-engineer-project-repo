@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useCreateVersion, useDeleteVersion, usePromptVersions, useRestoreVersion } from '../../api/hooks'
 import { Button } from '../Button'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { EmptyState } from '../EmptyState'
 import { ErrorMessageFromError } from '../ErrorMessage'
 import { LoadingIndicator } from '../LoadingIndicator'
 import { VersionDetailView } from './VersionDetailView'
@@ -80,6 +81,11 @@ export function VersionHistoryPanel({ promptId }: VersionHistoryPanelProps) {
           onDelete={() => setPending({ kind: 'delete', versionId: selected.id })}
           onClose={() => setSelectedId(null)}
         />
+      ) : sorted.length === 0 ? (
+        // A prompt gets its first version at creation time, so this is only
+        // reachable by deleting every version by hand - not the norm, but
+        // the panel shouldn't render a bare empty box if a user does it.
+        <EmptyState message="No version history yet. Save a checkpoint above to start one." />
       ) : (
         <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
           {sorted.map((version) => (
