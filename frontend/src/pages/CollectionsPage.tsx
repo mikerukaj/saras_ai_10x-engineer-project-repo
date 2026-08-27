@@ -60,6 +60,7 @@ export function CollectionsPage() {
       </form>
 
       {createCollection.error && <ErrorMessageFromError error={createCollection.error} />}
+      {deleteCollection.error && <ErrorMessageFromError error={deleteCollection.error} />}
       {isLoading && <LoadingIndicator label="Loading collections…" />}
       {error && <ErrorMessageFromError error={error} />}
 
@@ -83,10 +84,12 @@ export function CollectionsPage() {
         title="Delete this collection?"
         message="Prompts in this collection won't be deleted — they'll show as having no collection."
         confirmLabel="Delete"
+        confirming={deleteCollection.isPending}
         onCancel={() => setPendingDeleteId(null)}
         onConfirm={() => {
-          if (pendingDeleteId) deleteCollection.mutate(pendingDeleteId)
-          setPendingDeleteId(null)
+          if (pendingDeleteId) {
+            deleteCollection.mutate(pendingDeleteId, { onSettled: () => setPendingDeleteId(null) })
+          }
         }}
       />
     </Page>

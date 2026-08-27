@@ -6,13 +6,15 @@ import { Card } from '../Card'
 
 interface TagListItemProps {
   tag: Tag
+  /** True while this row's rename request is in flight. */
+  renaming?: boolean
   onRename: (name: string) => void
   onDelete: () => void
 }
 
 /** One row on TagsPage: name, prompt_count, rename (inline edit) and
  * delete actions (FR-033, FR-034). */
-export function TagListItem({ tag, onRename, onDelete }: TagListItemProps) {
+export function TagListItem({ tag, renaming = false, onRename, onDelete }: TagListItemProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(tag.name)
 
@@ -36,12 +38,18 @@ export function TagListItem({ tag, onRename, onDelete }: TagListItemProps) {
           className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
         />
       ) : (
-        <button type="button" onClick={() => setEditing(true)} className="text-left">
+        <button type="button" onClick={() => setEditing(true)} disabled={renaming} className="text-left">
           <span className="text-sm font-semibold text-slate-900">{tag.name}</span>
           <span className="ml-2 text-xs text-slate-500">{tag.prompt_count} prompt(s)</span>
+          {renaming && (
+            <span
+              className="ml-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600 align-middle"
+              aria-hidden="true"
+            />
+          )}
         </button>
       )}
-      <Button variant="danger" onClick={onDelete}>
+      <Button variant="danger" onClick={onDelete} disabled={renaming}>
         Delete
       </Button>
     </Card>

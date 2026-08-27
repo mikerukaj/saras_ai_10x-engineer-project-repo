@@ -49,6 +49,8 @@ export function PromptDetailPage() {
         </>
       }
     >
+      {deletePrompt.error && <ErrorMessageFromError error={deletePrompt.error} />}
+
       <Card>
         {prompt.description && <p className="mb-3 text-sm text-slate-600">{prompt.description}</p>}
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
@@ -72,10 +74,13 @@ export function PromptDetailPage() {
         title="Delete this prompt?"
         message="This can't be undone. Its version history will be deleted along with it."
         confirmLabel="Delete"
+        confirming={deletePrompt.isPending}
         onCancel={() => setConfirmingDelete(false)}
         onConfirm={() => {
-          deletePrompt.mutate(prompt.id, { onSuccess: () => navigate('/') })
-          setConfirmingDelete(false)
+          deletePrompt.mutate(prompt.id, {
+            onSuccess: () => navigate('/'),
+            onSettled: () => setConfirmingDelete(false),
+          })
         }}
       />
     </Page>

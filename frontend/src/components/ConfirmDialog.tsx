@@ -5,19 +5,25 @@ interface ConfirmDialogProps {
   title: string
   message: string
   confirmLabel?: string
+  /** True while the confirmed action's request is in flight — keeps the
+   * dialog open with a spinner on Confirm instead of closing immediately,
+   * so a slow network doesn't look like the click did nothing. Callers
+   * close the dialog themselves once the mutation settles. */
+  confirming?: boolean
   onConfirm: () => void
   onCancel: () => void
 }
 
 /** Reusable confirmation modal for every destructive action (delete
- * prompt, delete collection, delete version, delete tag) — a single
- * implementation instead of four ad hoc confirms, per FR-006's "explicit
- * confirmation step". */
+ * prompt, delete collection, delete version, delete tag, restore version)
+ * — a single implementation instead of five ad hoc confirms, per FR-006's
+ * "explicit confirmation step". */
 export function ConfirmDialog({
   open,
   title,
   message,
   confirmLabel = 'Confirm',
+  confirming = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -36,10 +42,10 @@ export function ConfirmDialog({
         </h2>
         <p className="mt-2 text-sm text-slate-600">{message}</p>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onCancel}>
+          <Button variant="secondary" disabled={confirming} onClick={onCancel}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={onConfirm}>
+          <Button variant="danger" loading={confirming} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>

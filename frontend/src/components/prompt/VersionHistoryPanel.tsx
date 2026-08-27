@@ -38,8 +38,27 @@ export function VersionHistoryPanel({ promptId }: VersionHistoryPanelProps) {
     })
   }
 
+  function handleConfirmPending() {
+    if (!pending) return
+    const { kind, versionId } = pending
+    if (kind === 'restore') {
+      restoreVersion.mutate(versionId, { onSettled: () => setPending(null) })
+    } else {
+      deleteVersion.mutate(versionId, {
+        onSuccess: () => {
+          if (versionId === selectedId) setSelectedId(null)
+        },
+        onSettled: () => setPending(null),
+      })
+    }
+  }
+
   return (
     <div>
+      {createVersion.error && <ErrorMessageFromError error={createVersion.error} />}
+      {restoreVersion.error && <ErrorMessageFromError error={restoreVersion.error} />}
+      {deleteVersion.error && <ErrorMessageFromError error={deleteVersion.error} />}
+
       <div className="mb-3 flex gap-2">
         <input
           type="text"
@@ -74,25 +93,18 @@ export function VersionHistoryPanel({ promptId }: VersionHistoryPanelProps) {
         title="Restore this version?"
         message="The prompt's current title, content, and description will be replaced. Its current state will itself be saved as a new version first, so this can be undone."
         confirmLabel="Restore"
+        confirming={restoreVersion.isPending}
         onCancel={() => setPending(null)}
-        onConfirm={() => {
-          if (pending) restoreVersion.mutate(pending.versionId)
-          setPending(null)
-        }}
+        onConfirm={handleConfirmPending}
       />
       <ConfirmDialog
         open={pending?.kind === 'delete'}
         title="Delete this version?"
         message="This history entry will be permanently removed. The prompt's current state is unaffected."
         confirmLabel="Delete"
+        confirming={deleteVersion.isPending}
         onCancel={() => setPending(null)}
-        onConfirm={() => {
-          if (pending) {
-            deleteVersion.mutate(pending.versionId)
-            if (pending.versionId === selectedId) setSelectedId(null)
-          }
-          setPending(null)
-        }}
+        onConfirm={handleConfirmPending}
       />
     </div>
   )
